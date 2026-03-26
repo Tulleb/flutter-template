@@ -1,0 +1,37 @@
+{
+  // Common
+  "editor.rulers": [
+    120
+  ],
+  "editor.codeActionsOnSave": {
+    "source.fixAll": "explicit",
+    "source.organizeImports": "explicit",
+  },
+  // Misc
+  "java.configuration.updateBuildConfiguration": "automatic",
+  // Extensions
+  // https://marketplace.cursorapi.com/items?itemName=Dart-Code.dart-code
+  "arb-editor.suppressedWarnings": [
+    "missing_metadata_for_key",
+    "placeholder_without_metadata",
+  ],
+  // https://marketplace.cursorapi.com/items?itemName=Dart-Code.dart-code
+  "dart.lineLength": 120,
+  // https://marketplace.cursorapi.com/items?itemName=jbockle.jbockle-format-files
+  "formatFiles.excludedFolders": [
+    ".git",
+    "build",
+    "ios/Pods",
+    ".dart_tool",
+    ".idea",
+    "android/.gradle",
+    "android/.idea",
+    "android/.kotlin",
+    "android/app/.cxx",
+    ".flutter-plugins",
+    ".flutter-plugins-dependencies",
+    "ios/Runner/Assets.xcassets"
+  ],
+  "formatFiles.extensionsToInclude": "dart,kt,json,yaml,yml,xml,csv,arb",
+  "formatFiles.excludePattern": "**/*.{g,freezed,pb*,graphql,generated}.dart,**/*.arb",
+}
