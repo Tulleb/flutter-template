@@ -15,4 +15,9 @@ mkdir agents
 ln -s $GIT_PATH/flutter/template/AGENTS.md .
 ln -s $GIT_PATH/flutter/template/agents/rules agents
 cp $GIT_PATH/flutter/template/RULES.md .
+
+# Scripts
+mkdir scripts
+ln -s $GIT_PATH/flutter/template/scripts/la-totale.sh scripts
+ln -s $GIT_PATH/flutter/template/scripts/release.sh scripts
 ```
