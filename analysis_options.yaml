@@ -1,0 +1,7 @@
+analyzer:
+  errors:
+    invalid_annotation_target: ignore
+    unnecessary_non_null_assertion: ignore
+
+formatter:
+  page_width: 120
