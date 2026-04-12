@@ -7,6 +7,9 @@ Default configuration files to include into a new Flutter repository.
 Run these commands from your project directory (replace `$GIT_PATH/flutter/template` by the path leading to this repository):
 
 ```bash
+# Git (symbolic link not working for .gitignore)
+cp $GIT_PATH/flutter/template/.gitignore .
+
 # Dart
 ln -s $GIT_PATH/flutter/template/analysis_options.yaml .
 
