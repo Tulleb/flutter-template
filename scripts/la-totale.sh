@@ -25,6 +25,8 @@ fi
 
 # Array of commands
 commands=(
+  "cd ios && rm -rf Pods Podfile.lock && cd .."
+  "cd ios && pod repo update && cd .."
   "flutter clean"
   "dart run build_runner clean"
   "find . -name '*.g.dart' -delete"
