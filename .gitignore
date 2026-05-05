@@ -1,13 +1,13 @@
 # Miscellaneous
 *.class
-*.lock
 *.log
 *.pyc
 *.swp
 .buildlog/
 .history
-
-
+.idea
+.env
+private_keys
 
 # Flutter repo-specific
 /bin/cache/
@@ -93,6 +93,7 @@ unlinked_spec.ds
 **/macos/Flutter/GeneratedPluginRegistrant.swift
 **/macos/Flutter/ephemeral
 **/xcuserdata/
+.DS_Store
 
 # Windows
 **/windows/flutter/generated_plugin_registrant.cc
@@ -117,6 +118,12 @@ app.*.symbols
 !**/ios/**/default.perspectivev3
 !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
 !/dev/ci/**/Gemfile.lock
-
-# MacOS
 .DS_Store
+.firebase
+
+# Generated files
+app_localizations*.dart
+*.g.dart
+*.freezed.dart
+*.zip
+devtools_options.yaml
