@@ -3,5 +3,9 @@ analyzer:
     invalid_annotation_target: ignore
     unnecessary_non_null_assertion: ignore
 
+  exclude:
+    - build/
+    - ios/build/**
+
 formatter:
   page_width: 120
