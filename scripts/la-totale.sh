@@ -25,8 +25,7 @@ fi
 
 # Array of commands
 commands=(
-  "cd ios && rm -rf Pods Podfile.lock && cd .."
-  "cd ios && pod repo update && cd .."
+  "rm -rf ios/Pods ios/Podfile.lock ios/.symlinks ios/Flutter/ephemeral ios/Runner.xcworkspace/xcshareddata/swiftpm ios/Runner.xcodeproj/project.xcworkspace/xcshareddata/swiftpm"
   "flutter clean"
   "dart run build_runner clean"
   "find . -name '*.g.dart' -delete"
@@ -38,7 +37,7 @@ commands=(
   "flutter gen-l10n"
   "dart run flutter_launcher_icons"
   "flutter test"
-  "cd ios && pod install && cd .."
+  "flutter build ios --config-only"
 )
 
 # Start of the script
