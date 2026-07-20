@@ -36,6 +36,7 @@ commands=(
   "dart run build_runner build --delete-conflicting-outputs"
   "flutter gen-l10n"
   "dart run flutter_launcher_icons"
+  "bash scripts/restore_assetcatalog_settings.sh"
   "flutter test"
   "flutter build ios --config-only"
 )
