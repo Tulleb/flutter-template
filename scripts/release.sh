@@ -196,17 +196,6 @@ case $platform_choice in
 esac
 
 #####################################
-# Create and push a commit with the version bump
-#####################################
-if [ ! -z "$NEW_VERSION_FULL" ]; then
-  info "Creating commit for version bump..."
-  git add pubspec.yaml
-  git commit -m "Version $NEW_VERSION_FULL"
-  git push origin main
-  success "Successfully pushed commit 'Version $NEW_VERSION_FULL' to remote!"
-fi
-
-#####################################
 # Run La Totale
 #####################################
 info "Starting La Totale..."
@@ -235,6 +224,7 @@ fi
 #####################################
 # Build for selected platforms
 #####################################
+BUILT_IOS=false
 for platform in "${PLATFORMS[@]}"; do
   info "Building for $platform..."
 
@@ -261,26 +251,60 @@ for platform in "${PLATFORMS[@]}"; do
         continue
       fi
 
-      # Build iOS app bundle
+      # Build iOS app bundle (upload happens after the version/lockfile commit)
       flutter build ipa --release --no-tree-shake-icons "${DART_DEFINE_ARGS[@]}"
       success "iOS build finished successfully."
-      info "Uploading to App Store Connect..."
-      xcrun altool --upload-app --type ios -f build/ios/ipa/*.ipa --apiKey $APP_STORE_CONNECT_API_KEY --apiIssuer $APP_STORE_CONNECT_APP_ISSUER_ID
-      success "Successfully uploaded to App Store Connect!"
+      BUILT_IOS=true
       ;;
   esac
 done
 
 #####################################
+# Commit version bump + iOS lockfiles (after builds regenerate them)
+#####################################
+RELEASE_TAG="${NEW_VERSION_FULL:-$CURRENT_TAG}"
+LOCKFILE_PATHS=(
+  "ios/Runner.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+  "ios/Runner.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+  "ios/Podfile.lock"
+)
+
+info "Staging release files for commit..."
+git add pubspec.yaml "${LOCKFILE_PATHS[@]}"
+
+if ! git diff --cached --quiet; then
+  if [ -n "$NEW_VERSION_FULL" ]; then
+    COMMIT_MSG="Version $NEW_VERSION_FULL"
+  else
+    COMMIT_MSG="Update iOS dependency lockfiles"
+  fi
+  info "Creating commit '$COMMIT_MSG'..."
+  git commit -m "$COMMIT_MSG"
+  git push origin main
+  success "Successfully pushed commit '$COMMIT_MSG' to remote!"
+else
+  info "No version or lockfile changes to commit."
+fi
+
+#####################################
+# Upload iOS build (after commit, so git matches what we ship)
+#####################################
+if [ "$BUILT_IOS" = true ]; then
+  info "Uploading to App Store Connect..."
+  xcrun altool --upload-app --type ios -f build/ios/ipa/*.ipa --apiKey $APP_STORE_CONNECT_API_KEY --apiIssuer $APP_STORE_CONNECT_APP_ISSUER_ID
+  success "Successfully uploaded to App Store Connect!"
+fi
+
+#####################################
 # Create and push Git tag
 #####################################
-info "Preparing to tag release as '$NEW_VERSION_FULL'..."
+info "Preparing to tag release as '$RELEASE_TAG'..."
 
 # Create a new annotated tag
-git tag -a "$NEW_VERSION_FULL" -m "Release $NEW_VERSION_FULL"
+git tag -a "$RELEASE_TAG" -m "Release $RELEASE_TAG"
 
 # Push the new tag to remote
-git push origin "$NEW_VERSION_FULL"
+git push origin "$RELEASE_TAG"
 
-success "Successfully pushed tag '$NEW_VERSION_FULL' to remote!"
+success "Successfully pushed tag '$RELEASE_TAG' to remote!"
 success "Release process completed successfully! 🎉"

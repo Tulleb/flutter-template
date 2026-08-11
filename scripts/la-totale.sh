@@ -25,7 +25,8 @@ fi
 
 # Array of commands
 commands=(
-  "rm -rf ios/Pods ios/Podfile.lock ios/.symlinks ios/Flutter/ephemeral ios/Runner.xcworkspace/xcshareddata/swiftpm ios/Runner.xcodeproj/project.xcworkspace/xcshareddata/swiftpm"
+  # Keep Package.resolved (tracked lockfiles) so SPM does not re-resolve on every clean.
+  "rm -rf ios/Pods ios/Podfile.lock ios/.symlinks ios/Flutter/ephemeral"
   "flutter clean"
   "dart run build_runner clean"
   "find . -name '*.g.dart' -delete"
