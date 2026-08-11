@@ -214,6 +214,25 @@ info "Starting La Totale..."
 success "La Totale finished successfully."
 
 #####################################
+# Optional dart_defines.json
+#####################################
+DART_DEFINE_ARGS=()
+if [ -f dart_defines.json ]; then
+  DART_DEFINE_ARGS+=(--dart-define-from-file=dart_defines.json)
+  info "Using dart_defines.json for compile-time defines (incl. RevenueCat)."
+else
+  error "WARNING: dart_defines.json not found."
+  info "Dependencies such as RevenueCat will not fully work without it."
+  read -p "Continue without dart_defines.json? (y/n) [n]: " continue_without_defines
+  continue_without_defines=${continue_without_defines:-n}
+  if [[ ! "$continue_without_defines" =~ ^[Yy]$ ]]; then
+    info "Exiting..."
+    exit 0
+  fi
+  info "Continuing without dart_defines.json."
+fi
+
+#####################################
 # Build for selected platforms
 #####################################
 for platform in "${PLATFORMS[@]}"; do
@@ -222,7 +241,7 @@ for platform in "${PLATFORMS[@]}"; do
   case $platform in
     "android")
       info "Building Android app bundle..."
-      flutter build appbundle --release --no-tree-shake-icons
+      flutter build appbundle --release --no-tree-shake-icons "${DART_DEFINE_ARGS[@]}"
       success "Android build finished successfully."
       info "Opening Android build directory..."
       open build/app/outputs/bundle/release
@@ -243,7 +262,7 @@ for platform in "${PLATFORMS[@]}"; do
       fi
 
       # Build iOS app bundle
-      flutter build ipa --release --no-tree-shake-icons
+      flutter build ipa --release --no-tree-shake-icons "${DART_DEFINE_ARGS[@]}"
       success "iOS build finished successfully."
       info "Uploading to App Store Connect..."
       xcrun altool --upload-app --type ios -f build/ios/ipa/*.ipa --apiKey $APP_STORE_CONNECT_API_KEY --apiIssuer $APP_STORE_CONNECT_APP_ISSUER_ID
