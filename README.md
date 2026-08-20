@@ -23,8 +23,4 @@ cp $GIT_PATH/template/flutter/RULES.md .
 mkdir scripts
 ln -s $GIT_PATH/template/flutter/scripts/la-totale.sh scripts
 ln -s $GIT_PATH/template/flutter/scripts/release.sh scripts
-
-# VSCode
-mkdir .vscode
-ln -s $GIT_PATH/template/flutter/.vscode/settings.json .vscode
 ```
