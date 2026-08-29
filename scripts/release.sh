@@ -20,6 +20,36 @@ error() {
   echo -e "\n${RED}[RELEASE] $1${NC}"
 }
 
+upload_ios_dsyms_to_crashlytics() {
+  local dsym_dir="build/ios/archive/Runner.xcarchive/dSYMs"
+  local firebase_app_id="1:273456533535:ios:010721aabf8582b157c52a"
+  local upload_symbols=""
+
+  if [ ! -d "$dsym_dir" ]; then
+    error "ERROR: dSYM directory not found at $dsym_dir"
+    exit 1
+  fi
+
+  for candidate in \
+    "build/ios/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/upload-symbols" \
+    "$HOME"/Library/Developer/Xcode/DerivedData/*/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/upload-symbols; do
+    if [ -f "$candidate" ]; then
+      upload_symbols="$candidate"
+      break
+    fi
+  done
+
+  if [ -z "$upload_symbols" ]; then
+    error "ERROR: Firebase Crashlytics upload-symbols script not found."
+    error "Run 'flutter build ipa --config-only' and try again."
+    exit 1
+  fi
+
+  info "Uploading dSYMs to Firebase Crashlytics..."
+  "$upload_symbols" -ai "$firebase_app_id" -p ios "$dsym_dir"
+  success "dSYMs uploaded to Firebase Crashlytics."
+}
+
 #####################################
 # Release type selection
 #####################################
@@ -254,6 +284,7 @@ for platform in "${PLATFORMS[@]}"; do
       # Build iOS app bundle (upload happens after the version/lockfile commit)
       flutter build ipa --release --no-tree-shake-icons "${DART_DEFINE_ARGS[@]}"
       success "iOS build finished successfully."
+      upload_ios_dsyms_to_crashlytics
       BUILT_IOS=true
       ;;
   esac
