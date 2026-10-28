@@ -6,8 +6,9 @@
 .buildlog/
 .history
 .idea
-.env
+.secret.local
 private_keys
+secrets
 
 # Flutter repo-specific
 /bin/cache/

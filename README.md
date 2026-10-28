@@ -23,4 +23,11 @@ cp $GIT_PATH/template/flutter/RULES.md .
 mkdir scripts
 ln -s $GIT_PATH/template/flutter/scripts/la-totale.sh scripts
 ln -s $GIT_PATH/template/flutter/scripts/release.sh scripts
+
+# Release secrets (never commit .secret.local)
+cp $GIT_PATH/template/flutter/.secret.local.example .secret.local
 ```
+
+## Release secrets
+
+Copy `.secret.local.example` to `.secret.local` (drop the `.example` suffix). Then generate the App Store Connect API key / `.p8` and the Google Play service-account JSON as described in that file, and fill in the empty values. Keep `.secret.local` and the key files outside version control; `scripts/release.sh` and the Fastlane lanes read them locally.
