@@ -294,9 +294,10 @@ case $platform_choice in
 esac
 
 #####################################
-# Optional store listings with Fastlane
-# Only offered in projects with a fastlane/Fastfile (lanes: validate_metadata, ios metadata,
-# android upload) and Bundler installed; otherwise the release runs as usual.
+# Store listings / Play upload with Fastlane when possible
+# Enabled automatically when fastlane/Fastfile exists and Bundler is installed
+# (lanes: validate_metadata, ios metadata, android upload); otherwise the release
+# runs without Fastlane.
 #####################################
 USE_FASTLANE=false
 # When true, Android AAB is uploaded via Fastlane after the commit; otherwise Finder opens.
@@ -305,34 +306,29 @@ if [ -f fastlane/Fastfile ]; then
   if ! command -v bundle &> /dev/null; then
     error "WARNING: fastlane/Fastfile found but Bundler is not installed: store listings will not be pushed."
   else
-    echo ""
-    info "Push the store listings (texts, screenshots, release notes) with Fastlane?"
+    info "Fastlane detected — using it for store listings."
     info "On Android, this also uploads the app bundle as a draft on the internal testing track."
-    read -p "Use Fastlane? (y/n) [n]: " fastlane_choice
-    fastlane_choice=${fastlane_choice:-n}
-    if [[ "$fastlane_choice" =~ ^[Yy]$ ]]; then
-      if [[ " ${PLATFORMS[*]} " == *" android "* ]]; then
-        if play_store_json_key_is_valid; then
-          USE_ANDROID_FASTLANE=true
-        else
-          error "WARNING: PLAY_STORE_JSON_KEY_PATH is missing, empty, or not a readable file."
-          info "Automatic Play Store upload is unavailable. You can still push iOS listings with Fastlane,"
-          info "and upload the Android AAB manually after the build."
-          read -p "Continue and upload Android manually later? (y/n) [y]: " manual_android_choice
-          manual_android_choice=${manual_android_choice:-y}
-          if [[ ! "$manual_android_choice" =~ ^[Yy]$ ]]; then
-            info "Exiting..."
-            exit 0
-          fi
+    if [[ " ${PLATFORMS[*]} " == *" android "* ]]; then
+      if play_store_json_key_is_valid; then
+        USE_ANDROID_FASTLANE=true
+      else
+        error "WARNING: PLAY_STORE_JSON_KEY_PATH is missing, empty, or not a readable file."
+        info "Automatic Play Store upload is unavailable. You can still push iOS listings with Fastlane,"
+        info "and upload the Android AAB manually after the build."
+        read -p "Continue and upload Android manually later? (y/n) [y]: " manual_android_choice
+        manual_android_choice=${manual_android_choice:-y}
+        if [[ ! "$manual_android_choice" =~ ^[Yy]$ ]]; then
+          info "Exiting..."
+          exit 0
         fi
       fi
-      info "Installing Fastlane..."
-      bundle check > /dev/null || bundle install
-      # Fails before the long builds if a store text is too long.
-      bundle exec fastlane validate_metadata
-      USE_FASTLANE=true
-      success "Fastlane is ready."
     fi
+    info "Installing Fastlane..."
+    bundle check > /dev/null || bundle install
+    # Fails before the long builds if a store text is too long.
+    bundle exec fastlane validate_metadata
+    USE_FASTLANE=true
+    success "Fastlane is ready."
   fi
 fi
 
@@ -398,7 +394,13 @@ for platform in "${PLATFORMS[@]}"; do
       fi
 
       # Build iOS app bundle (upload happens after the version/lockfile commit)
+      rm -rf build/ios/ipa
       flutter build ipa --release --no-tree-shake-icons "${DART_DEFINE_ARGS[@]}"
+      # flutter exits 0 when only the IPA export fails (e.g. missing provisioning profile)
+      if ! ls build/ios/ipa/*.ipa &> /dev/null; then
+        error "ERROR: No IPA was exported to build/ios/ipa. Check the signing errors above."
+        exit 1
+      fi
       success "iOS build finished successfully."
       if uses_crashlytics; then
         upload_ios_dsyms_to_crashlytics
@@ -421,7 +423,13 @@ LOCKFILE_PATHS=(
 )
 
 info "Staging release files for commit..."
-git add pubspec.yaml "${LOCKFILE_PATHS[@]}"
+git add pubspec.yaml
+# Only the lockfiles of the dependency manager in use exist (SwiftPM or CocoaPods)
+for lockfile in "${LOCKFILE_PATHS[@]}"; do
+  if [ -f "$lockfile" ]; then
+    git add "$lockfile"
+  fi
+done
 
 if ! git diff --cached --quiet; then
   if [ -n "$NEW_VERSION_FULL" ]; then
