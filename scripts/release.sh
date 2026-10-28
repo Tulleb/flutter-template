@@ -210,16 +210,28 @@ info "Current version: $VERSION_PART+$BUILD_PART"
 info "Fetching latest tags from remote..."
 git fetch --tags
 
-# Check if tag exists locally or remotely
-if git rev-parse "$CURRENT_TAG" >/dev/null 2>&1 || git ls-remote --exit-code --tags origin "$CURRENT_TAG" >/dev/null 2>&1; then
-  error "Tag '$CURRENT_TAG' already exists locally or on remote."
+# Every release is tagged x.y.z+build, so the tags hold every build number already uploaded,
+# whatever its version: the stores (Google Play above all) refuse to reuse one.
+HIGHEST_TAG_BUILD=$(git tag -l '*+*' | sed 's/.*+//' | grep -E '^[0-9]+$' | sort -n | tail -1)
+HIGHEST_TAG_BUILD=${HIGHEST_TAG_BUILD:-0}
+# Next build number: one past both pubspec.yaml and the highest tag
+NEXT_BUILD=$(( (BUILD_PART > HIGHEST_TAG_BUILD ? BUILD_PART : HIGHEST_TAG_BUILD) + 1 ))
+
+# Bump when the tag exists locally or remotely, or when its build number was already released
+if git rev-parse "$CURRENT_TAG" >/dev/null 2>&1 || git ls-remote --exit-code --tags origin "$CURRENT_TAG" >/dev/null 2>&1 \
+  || [ "$BUILD_PART" -le "$HIGHEST_TAG_BUILD" ]; then
+  if [ "$BUILD_PART" -le "$HIGHEST_TAG_BUILD" ]; then
+    error "Build number $BUILD_PART was already released (highest tagged build: $HIGHEST_TAG_BUILD)."
+  else
+    error "Tag '$CURRENT_TAG' already exists locally or on remote."
+  fi
   info "Current version: $VERSION_PART+$BUILD_PART"
   echo ""
   info "Would you like to automatically bump the version and create a merge request?"
   echo "1) Bump patch version (default) - $VERSION_PART -> $(echo $VERSION_PART | awk -F. '{$NF = $NF + 1;} 1' | sed 's/ /./g')"
   echo "2) Bump minor version - $VERSION_PART -> $(echo $VERSION_PART | awk -F. '{$2 = $2 + 1; $3 = 0;} 1' | sed 's/ /./g')"
   echo "3) Bump major version - $VERSION_PART -> $(echo $VERSION_PART | awk -F. '{$1 = $1 + 1; $2 = 0; $3 = 0;} 1' | sed 's/ /./g')"
-  echo "4) Only bump build number - $VERSION_PART+$BUILD_PART -> $VERSION_PART+$((BUILD_PART + 1))"
+  echo "4) Only bump build number - $VERSION_PART+$BUILD_PART -> $VERSION_PART+$NEXT_BUILD"
   echo "5) Exit"
   read -p "Choose an option (1-5) [1]: " choice
   choice=${choice:-1}
@@ -247,8 +259,7 @@ if git rev-parse "$CURRENT_TAG" >/dev/null 2>&1 || git ls-remote --exit-code --t
       ;;
   esac
 
-  # Increment build number
-  NEW_BUILD=$((BUILD_PART + 1))
+  NEW_BUILD=$NEXT_BUILD
   NEW_VERSION_FULL="$NEW_VERSION+$NEW_BUILD"
   info "New version will be: $NEW_VERSION_FULL"
 
@@ -446,6 +457,21 @@ else
 fi
 
 #####################################
+# Create and push Git tag
+# Before the uploads: a failure after a build reached a store would otherwise leave that build
+# number untagged, and the next release would reuse it.
+#####################################
+info "Preparing to tag release as '$RELEASE_TAG'..."
+
+# Create a new annotated tag
+git tag -a "$RELEASE_TAG" -m "Release $RELEASE_TAG"
+
+# Push the new tag to remote
+git push origin "$RELEASE_TAG"
+
+success "Successfully pushed tag '$RELEASE_TAG' to remote!"
+
+#####################################
 # Upload iOS build and listing (after commit, so git matches what we ship)
 #####################################
 if [ "$BUILT_IOS" = true ]; then
@@ -512,16 +538,4 @@ if [ "$BUILT_ANDROID" = true ]; then
   fi
 fi
 
-#####################################
-# Create and push Git tag
-#####################################
-info "Preparing to tag release as '$RELEASE_TAG'..."
-
-# Create a new annotated tag
-git tag -a "$RELEASE_TAG" -m "Release $RELEASE_TAG"
-
-# Push the new tag to remote
-git push origin "$RELEASE_TAG"
-
-success "Successfully pushed tag '$RELEASE_TAG' to remote!"
 success "Release process completed successfully! 🎉"
