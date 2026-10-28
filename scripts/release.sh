@@ -20,6 +20,8 @@ error() {
   echo -e "\n${RED}[RELEASE] $1${NC}"
 }
 
+ANDROID_AAB_DIR="build/app/outputs/bundle/release"
+
 upload_ios_dsyms_to_crashlytics() {
   local dsym_dir="build/ios/archive/Runner.xcarchive/dSYMs"
   local plist="ios/Runner/GoogleService-Info.plist"
@@ -57,6 +59,54 @@ upload_ios_dsyms_to_crashlytics() {
   info "Uploading dSYMs to Firebase Crashlytics..."
   "$upload_symbols" -ai "$firebase_app_id" -p ios "$dsym_dir"
   success "dSYMs uploaded to Firebase Crashlytics."
+}
+
+# Reveal the release AAB in Finder for a manual Play Console upload.
+open_android_aab_in_finder() {
+  local aab=""
+  if [ -d "$ANDROID_AAB_DIR" ]; then
+    aab=$(ls -t "$ANDROID_AAB_DIR"/*.aab 2>/dev/null | head -1 || true)
+  fi
+  if [ -n "$aab" ] && [ -f "$aab" ]; then
+    open -R "$aab"
+  elif [ -d "$ANDROID_AAB_DIR" ]; then
+    open "$ANDROID_AAB_DIR"
+  else
+    error "ERROR: Android App Bundle not found under $ANDROID_AAB_DIR"
+    return 1
+  fi
+}
+
+# Ask to continue with a manual Play upload, then open the AAB in Finder.
+# Returns 0 if the user continues, 1 if they decline.
+offer_manual_android_play_upload() {
+  local reason="$1"
+  error "$reason"
+  info "You can keep going with a manual upload: the AAB will be shown in Finder so you can upload it in Google Play Console."
+  read -p "Continue with manual upload? (y/n) [y]: " manual_choice
+  manual_choice=${manual_choice:-y}
+  if [[ ! "$manual_choice" =~ ^[Yy]$ ]]; then
+    info "Skipping Android upload."
+    return 1
+  fi
+  info "Opening the Android App Bundle in Finder..."
+  info "Upload it in Play Console → Testing → Internal testing (or your track) → Create new release."
+  open_android_aab_in_finder
+  success "AAB ready for manual upload to Google Play Console."
+  return 0
+}
+
+# True when PLAY_STORE_JSON_KEY_PATH is set and points to a readable file.
+play_store_json_key_is_valid() {
+  local play_key
+  play_key=$(grep -E "^PLAY_STORE_JSON_KEY_PATH\s*=" .secret.local | cut -d '=' -f2- | xargs)
+  if [ -z "$play_key" ]; then
+    return 1
+  fi
+  if [ ! -f "$play_key" ] || [ ! -r "$play_key" ]; then
+    return 1
+  fi
+  return 0
 }
 
 # Whether the project uses Crashlytics, whose iOS dSYMs are then uploaded after the build.
@@ -249,6 +299,8 @@ esac
 # android upload) and Bundler installed; otherwise the release runs as usual.
 #####################################
 USE_FASTLANE=false
+# When true, Android AAB is uploaded via Fastlane after the commit; otherwise Finder opens.
+USE_ANDROID_FASTLANE=false
 if [ -f fastlane/Fastfile ]; then
   if ! command -v bundle &> /dev/null; then
     error "WARNING: fastlane/Fastfile found but Bundler is not installed: store listings will not be pushed."
@@ -260,10 +312,18 @@ if [ -f fastlane/Fastfile ]; then
     fastlane_choice=${fastlane_choice:-n}
     if [[ "$fastlane_choice" =~ ^[Yy]$ ]]; then
       if [[ " ${PLATFORMS[*]} " == *" android "* ]]; then
-        PLAY_KEY=$(grep -E "^PLAY_STORE_JSON_KEY_PATH\s*=" .secret.local | cut -d '=' -f2- | xargs)
-        if [ -z "$PLAY_KEY" ]; then
-          error "ERROR: Key 'PLAY_STORE_JSON_KEY_PATH' is missing or empty in .secret.local."
-          exit 1
+        if play_store_json_key_is_valid; then
+          USE_ANDROID_FASTLANE=true
+        else
+          error "WARNING: PLAY_STORE_JSON_KEY_PATH is missing, empty, or not a readable file."
+          info "Automatic Play Store upload is unavailable. You can still push iOS listings with Fastlane,"
+          info "and upload the Android AAB manually after the build."
+          read -p "Continue and upload Android manually later? (y/n) [y]: " manual_android_choice
+          manual_android_choice=${manual_android_choice:-y}
+          if [[ ! "$manual_android_choice" =~ ^[Yy]$ ]]; then
+            info "Exiting..."
+            exit 0
+          fi
         fi
       fi
       info "Installing Fastlane..."
@@ -315,11 +375,11 @@ for platform in "${PLATFORMS[@]}"; do
       info "Building Android app bundle..."
       flutter build appbundle --release --no-tree-shake-icons "${DART_DEFINE_ARGS[@]}"
       success "Android build finished successfully."
-      if [ "$USE_FASTLANE" = true ]; then
-        BUILT_ANDROID=true
-      else
-        info "Opening Android build directory..."
-        open build/app/outputs/bundle/release
+      BUILT_ANDROID=true
+      if [ "$USE_ANDROID_FASTLANE" != true ] && [ "$USE_FASTLANE" != true ]; then
+        # No Fastlane at all: open Finder now (upload deferred only when Fastlane is in use).
+        info "Opening Android App Bundle in Finder for manual Play Console upload..."
+        open_android_aab_in_finder
       fi
       ;;
     "ios")
@@ -393,12 +453,28 @@ if [ "$BUILT_IOS" = true ]; then
 fi
 
 #####################################
-# Upload Android build and listing with Fastlane (after commit, like iOS)
+# Upload Android build and listing (after commit, like iOS)
+# Fastlane when the Play JSON key is valid; otherwise (or on failure) manual via Finder.
 #####################################
 if [ "$BUILT_ANDROID" = true ]; then
-  info "Uploading to Google Play (internal testing, draft) with Fastlane..."
-  bundle exec fastlane android upload
-  success "Successfully uploaded to Google Play!"
+  if [ "$USE_ANDROID_FASTLANE" = true ]; then
+    info "Uploading to Google Play (internal testing, draft) with Fastlane..."
+    set +e
+    bundle exec fastlane android upload
+    ANDROID_UPLOAD_STATUS=$?
+    set -e
+    if [ $ANDROID_UPLOAD_STATUS -eq 0 ]; then
+      success "Successfully uploaded to Google Play!"
+    else
+      offer_manual_android_play_upload "Fastlane Play Store upload failed (exit $ANDROID_UPLOAD_STATUS)."
+    fi
+  elif [ "$USE_FASTLANE" = true ]; then
+    # Fastlane used for listings/iOS; Android is manual (user already agreed when the Play key was invalid).
+    info "Opening the Android App Bundle in Finder for manual Play Console upload..."
+    info "Upload it in Play Console → Testing → Internal testing (or your track) → Create new release."
+    open_android_aab_in_finder
+    success "AAB ready for manual upload to Google Play Console."
+  fi
 fi
 
 #####################################
