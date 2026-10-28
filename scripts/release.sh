@@ -449,6 +449,33 @@ fi
 # Upload iOS build and listing (after commit, so git matches what we ship)
 #####################################
 if [ "$BUILT_IOS" = true ]; then
+  # altool ignores APP_STORE_CONNECT_API_KEY_PATH; it only searches fixed dirs
+  # (./private_keys, ~/private_keys, …) or $API_PRIVATE_KEYS_DIR for
+  # AuthKey_<apiKey>.p8. Point that env at the directory of our configured key.
+  if [ -n "${APP_STORE_CONNECT_API_KEY_PATH:-}" ]; then
+    ASC_KEY_PATH="$APP_STORE_CONNECT_API_KEY_PATH"
+    case "$ASC_KEY_PATH" in
+      "~/"*) ASC_KEY_PATH="$HOME/${ASC_KEY_PATH#~/}" ;;
+      "~") ASC_KEY_PATH="$HOME" ;;
+    esac
+    if [[ "$ASC_KEY_PATH" != /* ]]; then
+      ASC_KEY_PATH="$(pwd)/${ASC_KEY_PATH#./}"
+    fi
+    if [ ! -f "$ASC_KEY_PATH" ]; then
+      error "ERROR: App Store Connect API key file not found: $APP_STORE_CONNECT_API_KEY_PATH"
+      exit 1
+    fi
+    EXPECTED_ASC_KEY_NAME="AuthKey_${APP_STORE_CONNECT_API_KEY}.p8"
+    ACTUAL_ASC_KEY_NAME="$(basename "$ASC_KEY_PATH")"
+    if [ "$ACTUAL_ASC_KEY_NAME" != "$EXPECTED_ASC_KEY_NAME" ]; then
+      error "ERROR: Key file must be named '$EXPECTED_ASC_KEY_NAME' (got '$ACTUAL_ASC_KEY_NAME')."
+      error "APP_STORE_CONNECT_API_KEY must match the Key ID in the .p8 filename."
+      exit 1
+    fi
+    export API_PRIVATE_KEYS_DIR="$(dirname "$ASC_KEY_PATH")"
+    info "Using App Store Connect API key from $API_PRIVATE_KEYS_DIR"
+  fi
+
   info "Uploading to App Store Connect..."
   xcrun altool --upload-app --type ios -f build/ios/ipa/*.ipa --apiKey $APP_STORE_CONNECT_API_KEY --apiIssuer $APP_STORE_CONNECT_APP_ISSUER_ID
   success "Successfully uploaded to App Store Connect!"
