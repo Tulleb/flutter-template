@@ -22,8 +22,17 @@ error() {
 
 upload_ios_dsyms_to_crashlytics() {
   local dsym_dir="build/ios/archive/Runner.xcarchive/dSYMs"
-  local firebase_app_id="1:273456533535:ios:010721aabf8582b157c52a"
+  local plist="ios/Runner/GoogleService-Info.plist"
+  local firebase_app_id=""
   local upload_symbols=""
+
+  if [ -f "$plist" ]; then
+    firebase_app_id=$(/usr/libexec/PlistBuddy -c "Print :GOOGLE_APP_ID" "$plist" 2>/dev/null || true)
+  fi
+  if [ -z "$firebase_app_id" ]; then
+    error "ERROR: GOOGLE_APP_ID not found in $plist, needed to upload dSYMs to Crashlytics."
+    exit 1
+  fi
 
   if [ ! -d "$dsym_dir" ]; then
     error "ERROR: dSYM directory not found at $dsym_dir"
@@ -50,15 +59,24 @@ upload_ios_dsyms_to_crashlytics() {
   success "dSYMs uploaded to Firebase Crashlytics."
 }
 
+# Whether the project uses Crashlytics, whose iOS dSYMs are then uploaded after the build.
+uses_crashlytics() {
+  grep -Eq "^[[:space:]]+firebase_crashlytics:" pubspec.yaml
+}
+
 #####################################
-# Release type selection
+# Release type selection (the web app only exists in projects with lib/main_web.dart)
 #####################################
-info "What would you like to release?"
-echo "1) Mobile App (default)"
-echo "2) Web App"
-echo "3) Exit"
-read -p "Choose an option (1-3) [1]: " release_choice
-release_choice=${release_choice:-1}
+if [ -f lib/main_web.dart ]; then
+  info "What would you like to release?"
+  echo "1) Mobile App (default)"
+  echo "2) Web App"
+  echo "3) Exit"
+  read -p "Choose an option (1-3) [1]: " release_choice
+  release_choice=${release_choice:-1}
+else
+  release_choice=1
+fi
 
 if [ "$release_choice" == "3" ]; then
   info "Exiting..."
@@ -66,10 +84,10 @@ if [ "$release_choice" == "3" ]; then
 fi
 
 #####################################
-# Check .env exists
+# Check .secret.local exists
 #####################################
-if [ ! -f .env ]; then
-  error "ERROR: .env file not found."
+if [ ! -f .secret.local ]; then
+  error "ERROR: .secret.local file not found."
   exit 1
 fi
 
@@ -88,13 +106,13 @@ if [ "$release_choice" == "2" ]; then
 fi
 
 #####################################
-# Load environment variables from .env file
+# Load secrets from .secret.local file (exported for xcrun altool and Fastlane)
 #####################################
-info "Loading environment variables from .env file..."
-export $(grep -v '^#' .env | xargs)
+info "Loading secrets from .secret.local file..."
+export $(grep -v '^#' .secret.local | xargs)
 
 #####################################
-# Define the required ENV keys (Mobile only)
+# Define the required secret keys (Mobile only)
 #####################################
 REQUIRED_KEYS=(
   "APP_STORE_CONNECT_API_KEY"
@@ -104,15 +122,15 @@ REQUIRED_KEYS=(
 #####################################
 # Check that each key has a value
 #####################################
-info "Validating required environment variables..."
+info "Validating required secrets..."
 for KEY in "${REQUIRED_KEYS[@]}"; do
-  VALUE=$(grep -E "^$KEY\s*=" .env | cut -d '=' -f2- | xargs)
+  VALUE=$(grep -E "^$KEY\s*=" .secret.local | cut -d '=' -f2- | xargs)
   if [ -z "$VALUE" ]; then
-    error "ERROR: Key '$KEY' is missing or empty in .env."
+    error "ERROR: Key '$KEY' is missing or empty in .secret.local."
     exit 1
   fi
 done
-success "All required environment variables are present."
+success "All required secrets are present."
 
 #####################################
 # Extract version from pubspec.yaml and check tag
@@ -226,6 +244,39 @@ case $platform_choice in
 esac
 
 #####################################
+# Optional store listings with Fastlane
+# Only offered in projects with a fastlane/Fastfile (lanes: validate_metadata, ios metadata,
+# android upload) and Bundler installed; otherwise the release runs as usual.
+#####################################
+USE_FASTLANE=false
+if [ -f fastlane/Fastfile ]; then
+  if ! command -v bundle &> /dev/null; then
+    error "WARNING: fastlane/Fastfile found but Bundler is not installed: store listings will not be pushed."
+  else
+    echo ""
+    info "Push the store listings (texts, screenshots, release notes) with Fastlane?"
+    info "On Android, this also uploads the app bundle as a draft on the internal testing track."
+    read -p "Use Fastlane? (y/n) [n]: " fastlane_choice
+    fastlane_choice=${fastlane_choice:-n}
+    if [[ "$fastlane_choice" =~ ^[Yy]$ ]]; then
+      if [[ " ${PLATFORMS[*]} " == *" android "* ]]; then
+        PLAY_KEY=$(grep -E "^PLAY_STORE_JSON_KEY_PATH\s*=" .secret.local | cut -d '=' -f2- | xargs)
+        if [ -z "$PLAY_KEY" ]; then
+          error "ERROR: Key 'PLAY_STORE_JSON_KEY_PATH' is missing or empty in .secret.local."
+          exit 1
+        fi
+      fi
+      info "Installing Fastlane..."
+      bundle check > /dev/null || bundle install
+      # Fails before the long builds if a store text is too long.
+      bundle exec fastlane validate_metadata
+      USE_FASTLANE=true
+      success "Fastlane is ready."
+    fi
+  fi
+fi
+
+#####################################
 # Run La Totale
 #####################################
 info "Starting La Totale..."
@@ -255,6 +306,7 @@ fi
 # Build for selected platforms
 #####################################
 BUILT_IOS=false
+BUILT_ANDROID=false
 for platform in "${PLATFORMS[@]}"; do
   info "Building for $platform..."
 
@@ -263,8 +315,12 @@ for platform in "${PLATFORMS[@]}"; do
       info "Building Android app bundle..."
       flutter build appbundle --release --no-tree-shake-icons "${DART_DEFINE_ARGS[@]}"
       success "Android build finished successfully."
-      info "Opening Android build directory..."
-      open build/app/outputs/bundle/release
+      if [ "$USE_FASTLANE" = true ]; then
+        BUILT_ANDROID=true
+      else
+        info "Opening Android build directory..."
+        open build/app/outputs/bundle/release
+      fi
       ;;
     "ios")
       info "Building iOS app bundle..."
@@ -284,7 +340,11 @@ for platform in "${PLATFORMS[@]}"; do
       # Build iOS app bundle (upload happens after the version/lockfile commit)
       flutter build ipa --release --no-tree-shake-icons "${DART_DEFINE_ARGS[@]}"
       success "iOS build finished successfully."
-      upload_ios_dsyms_to_crashlytics
+      if uses_crashlytics; then
+        upload_ios_dsyms_to_crashlytics
+      else
+        info "No firebase_crashlytics dependency: skipping the dSYM upload."
+      fi
       BUILT_IOS=true
       ;;
   esac
@@ -318,12 +378,27 @@ else
 fi
 
 #####################################
-# Upload iOS build (after commit, so git matches what we ship)
+# Upload iOS build and listing (after commit, so git matches what we ship)
 #####################################
 if [ "$BUILT_IOS" = true ]; then
   info "Uploading to App Store Connect..."
   xcrun altool --upload-app --type ios -f build/ios/ipa/*.ipa --apiKey $APP_STORE_CONNECT_API_KEY --apiIssuer $APP_STORE_CONNECT_APP_ISSUER_ID
   success "Successfully uploaded to App Store Connect!"
+
+  if [ "$USE_FASTLANE" = true ]; then
+    info "Pushing the App Store listing with Fastlane..."
+    bundle exec fastlane ios metadata
+    success "App Store listing pushed (not submitted for review)."
+  fi
+fi
+
+#####################################
+# Upload Android build and listing with Fastlane (after commit, like iOS)
+#####################################
+if [ "$BUILT_ANDROID" = true ]; then
+  info "Uploading to Google Play (internal testing, draft) with Fastlane..."
+  bundle exec fastlane android upload
+  success "Successfully uploaded to Google Play!"
 fi
 
 #####################################
