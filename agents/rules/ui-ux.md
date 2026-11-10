@@ -10,6 +10,15 @@
 - **Shadows and Depth:** Use layered shadows to create depth. For example, cards and modals can have subtle drop shadows to appear elevated above the background.
 - **Icons:** Use icons to enhance understanding and usability, but keep them consistent and intuitive.
 - **Interactive Feedback:** For interactive elements (buttons, sliders, list items, etc.), use feedbacks. They should be visual like color or shadow changes to indicate hover, focus, or pressed states (creating a gentle “glow” or highlighting effect), and may also include haptics when appropriate.
+- **Transitions:** A view never appears or disappears instantly. See [Transitions and Motion](#transitions-and-motion).
+
+## Transitions and Motion
+
+- **Screens:** Every route animates in and out. Set `ThemeData.pageTransitionsTheme` explicitly for every `TargetPlatform` (`CupertinoPageTransitionsBuilder` on iOS and macOS, `PredictiveBackPageTransitionsBuilder` on Android, `ZoomPageTransitionsBuilder` elsewhere). Never use `NoTransitionPage`, `PageRouteBuilder` with a zero `transitionDuration`, or `Navigator` calls that skip the animation. Custom routes (e.g. go_router's `CustomTransitionPage`) must define a transition.
+- **Views inside a screen:** When one view replaces another (loading → content, content → error, empty → list, step → step), cross-fade them with `AnimatedSwitcher` (give each child a distinct `key`) instead of swapping them in one frame. Use `AnimatedOpacity`, `AnimatedSize`, `AnimatedCrossFade` or implicit `Animated*` widgets for elements that show, hide or resize, so the layout never jumps.
+- **Lists:** Items added or removed while the list is on screen should animate (`AnimatedList`, `SliverAnimatedList`, or a size + fade transition).
+- **Overlays:** Dialogs, sheets and snack bars use their built-in Material animations; never disable them.
+- **Timing:** Keep transitions short (about 200–400 ms) with ease-out curves, so the app feels responsive rather than slow.
 
 ## Theming
 
