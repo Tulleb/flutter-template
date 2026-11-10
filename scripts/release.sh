@@ -202,13 +202,49 @@ if [ -z "$BUILD_PART" ]; then
   exit 1
 fi
 
-# Construct the Git tag (e.g. 1.2.3_45)
-CURRENT_TAG="${VERSION_PART}+${BUILD_PART}"
-info "Current version: $VERSION_PART+$BUILD_PART"
-
 # Ensure local tags are in sync with remote
 info "Fetching latest tags from remote..."
 git fetch --tags
+
+# Release versions never carry a ".0" patch (1.3, not 1.3.0); a patch above 0 is kept (1.3.1).
+# pubspec.yaml still needs a full x.y.z (Flutter refuses 1.3+45), so it keeps 1.3.0 while the
+# stores (--build-name), the tag and the commit message use 1.3.
+short_version() {
+  echo "$1" | sed -E 's/^([0-9]+\.[0-9]+)\.0$/\1/'
+}
+
+pubspec_version() {
+  echo "$1" | awk -F. '{ print ($1 + 0) "." ($2 + 0) "." ($3 + 0) }'
+}
+
+# A version already released as x.y.0 keeps that form: current versions are never rewritten.
+release_version_for() {
+  local short
+  short=$(short_version "$1")
+  if [ "$short" != "$1" ] && [ -n "$(git tag -l "$1+*")" ] && [ -z "$(git tag -l "$short+*")" ]; then
+    echo "$1"
+  else
+    echo "$short"
+  fi
+}
+
+bump_patch() {
+  echo "$1" | awk -F. '{ print ($1 + 0) "." ($2 + 0) "." ($3 + 1) }'
+}
+
+bump_minor() {
+  echo "$1" | awk -F. '{ print ($1 + 0) "." ($2 + 1) }'
+}
+
+bump_major() {
+  echo "$1" | awk -F. '{ print ($1 + 1) ".0" }'
+}
+
+RELEASE_VERSION=$(release_version_for "$VERSION_PART")
+
+# Construct the Git tag (e.g. 1.2.3+45)
+CURRENT_TAG="${RELEASE_VERSION}+${BUILD_PART}"
+info "Current version: $RELEASE_VERSION+$BUILD_PART"
 
 # Every release is tagged x.y.z+build, so the tags hold every build number already uploaded,
 # whatever its version: the stores (Google Play above all) refuse to reuse one.
@@ -225,29 +261,29 @@ if git rev-parse "$CURRENT_TAG" >/dev/null 2>&1 || git ls-remote --exit-code --t
   else
     error "Tag '$CURRENT_TAG' already exists locally or on remote."
   fi
-  info "Current version: $VERSION_PART+$BUILD_PART"
+  info "Current version: $RELEASE_VERSION+$BUILD_PART"
   echo ""
   info "Would you like to automatically bump the version and create a merge request?"
-  echo "1) Bump patch version (default) - $VERSION_PART -> $(echo $VERSION_PART | awk -F. '{$NF = $NF + 1;} 1' | sed 's/ /./g')"
-  echo "2) Bump minor version - $VERSION_PART -> $(echo $VERSION_PART | awk -F. '{$2 = $2 + 1; $3 = 0;} 1' | sed 's/ /./g')"
-  echo "3) Bump major version - $VERSION_PART -> $(echo $VERSION_PART | awk -F. '{$1 = $1 + 1; $2 = 0; $3 = 0;} 1' | sed 's/ /./g')"
-  echo "4) Only bump build number - $VERSION_PART+$BUILD_PART -> $VERSION_PART+$NEXT_BUILD"
+  echo "1) Bump patch version (default) - $RELEASE_VERSION -> $(bump_patch "$VERSION_PART")"
+  echo "2) Bump minor version - $RELEASE_VERSION -> $(bump_minor "$VERSION_PART")"
+  echo "3) Bump major version - $RELEASE_VERSION -> $(bump_major "$VERSION_PART")"
+  echo "4) Only bump build number - $RELEASE_VERSION+$BUILD_PART -> $RELEASE_VERSION+$NEXT_BUILD"
   echo "5) Exit"
   read -p "Choose an option (1-5) [1]: " choice
   choice=${choice:-1}
 
   case $choice in
     1)
-      NEW_VERSION=$(echo $VERSION_PART | awk -F. '{$NF = $NF + 1;} 1' | sed 's/ /./g')
+      NEW_VERSION=$(bump_patch "$VERSION_PART")
       ;;
     2)
-      NEW_VERSION=$(echo $VERSION_PART | awk -F. '{$2 = $2 + 1; $3 = 0;} 1' | sed 's/ /./g')
+      NEW_VERSION=$(bump_minor "$VERSION_PART")
       ;;
     3)
-      NEW_VERSION=$(echo $VERSION_PART | awk -F. '{$1 = $1 + 1; $2 = 0; $3 = 0;} 1' | sed 's/ /./g')
+      NEW_VERSION=$(bump_major "$VERSION_PART")
       ;;
     4)
-      NEW_VERSION=$VERSION_PART
+      NEW_VERSION=$RELEASE_VERSION
       ;;
     5)
       info "Exiting..."
@@ -260,13 +296,15 @@ if git rev-parse "$CURRENT_TAG" >/dev/null 2>&1 || git ls-remote --exit-code --t
   esac
 
   NEW_BUILD=$NEXT_BUILD
+  RELEASE_VERSION=$NEW_VERSION
   NEW_VERSION_FULL="$NEW_VERSION+$NEW_BUILD"
+  PUBSPEC_VERSION_FULL="$(pubspec_version "$NEW_VERSION")+$NEW_BUILD"
   info "New version will be: $NEW_VERSION_FULL"
 
   # Update pubspec.yaml with new version and build number
   info "Updating pubspec.yaml with new version..."
-  sed -i '' "s/^version: .*$/version: $NEW_VERSION_FULL/" pubspec.yaml
-  success "Updated pubspec.yaml to version $NEW_VERSION_FULL"
+  sed -i '' "s/^version: .*$/version: $PUBSPEC_VERSION_FULL/" pubspec.yaml
+  success "Updated pubspec.yaml to version $PUBSPEC_VERSION_FULL"
 fi
 
 #####################################
@@ -380,7 +418,7 @@ for platform in "${PLATFORMS[@]}"; do
   case $platform in
     "android")
       info "Building Android app bundle..."
-      flutter build appbundle --release --no-tree-shake-icons "${DART_DEFINE_ARGS[@]}"
+      flutter build appbundle --release --no-tree-shake-icons --build-name "$RELEASE_VERSION" "${DART_DEFINE_ARGS[@]}"
       success "Android build finished successfully."
       BUILT_ANDROID=true
       if [ "$USE_ANDROID_FASTLANE" != true ] && [ "$USE_FASTLANE" != true ]; then
@@ -406,7 +444,7 @@ for platform in "${PLATFORMS[@]}"; do
 
       # Build iOS app bundle (upload happens after the version/lockfile commit)
       rm -rf build/ios/ipa
-      flutter build ipa --release --no-tree-shake-icons "${DART_DEFINE_ARGS[@]}"
+      flutter build ipa --release --no-tree-shake-icons --build-name "$RELEASE_VERSION" "${DART_DEFINE_ARGS[@]}"
       # flutter exits 0 when only the IPA export fails (e.g. missing provisioning profile)
       if ! ls build/ios/ipa/*.ipa &> /dev/null; then
         error "ERROR: No IPA was exported to build/ios/ipa. Check the signing errors above."
