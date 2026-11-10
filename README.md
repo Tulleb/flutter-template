@@ -38,7 +38,7 @@ Fastlane needs this key to upload builds and store listings to Google Play.
 
 1. In the [Google Cloud Console](https://console.cloud.google.com), select or create a project.
 2. Go to **APIs & Services → Library** and enable the **Google Play Android Developer API**.
-3. Go to **IAM & Admin → Service Accounts → Create service account**, name it (e.g. `fastlane-play`) and skip the optional role step.
+3. Go to **IAM & Admin → Service Accounts → Create service account**, name it (e.g. `fastlane`) and skip the optional role step.
 4. Open the new service account, go to **Keys → Add key → Create new key → JSON**. A `.json` file is downloaded.
 5. In the [Google Play Console](https://play.google.com/console), go to **Users and permissions → Invite new users** and enter the service account's email (`…@….iam.gserviceaccount.com`).
 6. Under **App permissions**, add the app and allow **View app information**, **Release to testing tracks** and **Manage store presence**, then send the invitation.
