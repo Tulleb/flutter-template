@@ -23,24 +23,46 @@ if [ ! -f "pubspec.yaml" ]; then
   exit 1
 fi
 
+# Steps that only apply when the project uses the matching tool
+uses_package() {
+  grep -Eq "^[[:space:]]+$1:" pubspec.yaml
+}
+uses_l10n() {
+  [ -f l10n.yaml ] || grep -Eq "^[[:space:]]+generate:[[:space:]]*true" pubspec.yaml
+}
+
 # Array of commands
 commands=(
   # Keep Package.resolved (tracked lockfiles) so SPM does not re-resolve on every clean.
   "rm -rf ios/Pods ios/Podfile.lock ios/.symlinks ios/Flutter/ephemeral"
   "flutter clean"
-  "dart run build_runner clean"
+)
+if uses_package build_runner; then
+  commands+=("dart run build_runner clean")
+fi
+commands+=(
   "find . -name '*.g.dart' -delete"
   "find . -name '*.freezed.dart' -delete"
   "find . -name 'app_localizations*.dart' -delete"
   "rm -rf android/app/.cxx"
   "flutter pub get"
-  "dart run build_runner build --delete-conflicting-outputs"
-  "flutter gen-l10n"
-  "dart run flutter_launcher_icons"
-  "bash scripts/restore_assetcatalog_settings.sh"
-  "flutter test"
-  "flutter build ios --config-only"
 )
+if uses_package build_runner; then
+  commands+=("dart run build_runner build --delete-conflicting-outputs")
+fi
+if uses_l10n; then
+  commands+=("flutter gen-l10n")
+fi
+if uses_package flutter_launcher_icons; then
+  commands+=(
+    "dart run flutter_launcher_icons"
+    "bash scripts/restore_assetcatalog_settings.sh"
+  )
+fi
+if [ -d test ]; then
+  commands+=("flutter test")
+fi
+commands+=("flutter build ios --config-only")
 
 # Start of the script
 info "Starting La Totale..."
