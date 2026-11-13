@@ -2,7 +2,8 @@
 """Write the localized release notes of RELEASE_VERSION with OpenAI.
 
 Called by scripts/release.sh when fastlane/release_notes_version.txt does not hold the version
-being released; can also be run by hand from the project root:
+being released, or when a store locale has blank notes (such as a freshly downloaded empty App
+Store "What's New"); it then rewrites the notes of every locale. Can also be run by hand from the project root:
 `RELEASE_VERSION=1.3 scripts/write-changelog.py`.
 
 The model follows scripts/changelog-format.md (shared rules, next to this script in the Flutter

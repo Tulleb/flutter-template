@@ -142,6 +142,12 @@ release_notes_locales() {
   done
 }
 
+# True when a file holds text other than whitespace: the stores refuse blank notes, and Fastlane
+# downloads an empty "What's New" as a file holding just a newline, which `[ -s ]` accepts.
+has_text() {
+  grep -q '[^[:space:]]' "$1" 2>/dev/null
+}
+
 # True when fastlane/release_notes_version.txt names the version being released and every store
 # locale has its notes (scripts/changelog-format.md).
 release_notes_are_current() {
@@ -151,11 +157,11 @@ release_notes_are_current() {
     return 1
   fi
   for locale in $(release_notes_locales ios); do
-    [ -s "$ios_dir/$locale/release_notes.txt" ] || return 1
+    has_text "$ios_dir/$locale/release_notes.txt" || return 1
   done
   for locale in $(release_notes_locales android); do
-    [ -s "fastlane/metadata/android/$locale/changelogs/default.txt" ] \
-      || [ -s "fastlane/metadata/android/$locale/changelogs/$RELEASE_BUILD.txt" ] || return 1
+    has_text "fastlane/metadata/android/$locale/changelogs/default.txt" \
+      || has_text "fastlane/metadata/android/$locale/changelogs/$RELEASE_BUILD.txt" || return 1
   done
   return 0
 }
@@ -250,8 +256,8 @@ open_android_release_notes() {
   : > "$notes_file"
   for locale in $(release_notes_locales android); do
     notes="fastlane/metadata/android/$locale/changelogs/$RELEASE_BUILD.txt"
-    [ -s "$notes" ] || notes="fastlane/metadata/android/$locale/changelogs/default.txt"
-    [ -s "$notes" ] || continue
+    has_text "$notes" || notes="fastlane/metadata/android/$locale/changelogs/default.txt"
+    has_text "$notes" || continue
     printf '<%s>\n%s\n</%s>\n' "$locale" "$(cat "$notes")" "$locale" >> "$notes_file"
     found=true
   done
