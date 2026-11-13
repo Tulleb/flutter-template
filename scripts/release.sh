@@ -160,6 +160,48 @@ release_notes_are_current() {
   return 0
 }
 
+# Asks whether to download the current store metadata ($1: ios or android, with the
+# `download_metadata` lanes) when the project has no store locale for that store yet, so the
+# release notes can be written for its locales. Sets
+# DOWNLOAD_<STORE>_METADATA=true on yes (the default); the download runs once Fastlane is
+# installed (download_store_metadata).
+offer_store_metadata_download() {
+  local store=$1 name folder choice
+  if [ "$store" = "ios" ]; then
+    name="App Store"; folder=$(ios_metadata_dir)
+  else
+    name="Google Play"; folder="fastlane/metadata/android"
+  fi
+  [ -z "$(release_notes_locales "$store")" ] || return 0
+  fastfile_has_lane download_metadata || return 0
+  echo ""
+  info "No $name texts in $folder: without them, no release notes are written for $name."
+  info "Downloading the current $name metadata versions it in $folder (every locale's texts,"
+  info "and the images on Google Play; the App Store review information too, demo account"
+  info "password included). From then on, each release pushes it: edit it there, not in the console."
+  read -p "Download the current $name metadata? (y/n) [y]: " choice
+  choice=${choice:-y}
+  if [[ "$choice" =~ ^[Yy]$ ]]; then
+    if [ "$store" = "ios" ]; then DOWNLOAD_IOS_METADATA=true; else DOWNLOAD_ANDROID_METADATA=true; fi
+  else
+    info "Not downloading the $name metadata: write the release notes in the store console."
+  fi
+}
+
+# Downloads the store metadata accepted in offer_store_metadata_download. A failed download does not
+# stop the release: the release notes are then written in the store console.
+download_store_metadata() {
+  local store
+  for store in ios android; do
+    if [ "$store" = "ios" ] && [ "$DOWNLOAD_IOS_METADATA" != true ]; then continue; fi
+    if [ "$store" = "android" ] && [ "$DOWNLOAD_ANDROID_METADATA" != true ]; then continue; fi
+    info "Downloading the current $store store metadata with Fastlane..."
+    if ! bundle exec fastlane "$store" download_metadata; then
+      error "WARNING: The $store store metadata could not be downloaded: write the release notes in the store console."
+    fi
+  done
+}
+
 # Writes the localized release notes of this version with AI (scripts/write-changelog.py) when
 # they are missing. They stay uncommitted until the release commit, after the builds.
 write_release_notes_if_needed() {
@@ -681,6 +723,8 @@ fi
 # later, once the version is set.
 #####################################
 FASTLANE_AVAILABLE=false
+DOWNLOAD_IOS_METADATA=false
+DOWNLOAD_ANDROID_METADATA=false
 # When true, Android AAB is uploaded via Fastlane after the commit; otherwise Finder opens.
 USE_ANDROID_FASTLANE=false
 if [ "$PROJECT_TYPE" = "ios" ]; then
@@ -731,6 +775,14 @@ if [ -f fastlane/Fastfile ]; then
           exit 0
         fi
       fi
+    fi
+    # Store metadata to download when the project has none yet (asked now, downloaded once
+    # Fastlane is installed).
+    if [[ " ${PLATFORMS[*]} " == *" ios "* ]]; then
+      offer_store_metadata_download ios
+    fi
+    if [ "$USE_ANDROID_FASTLANE" = true ]; then
+      offer_store_metadata_download android
     fi
     FASTLANE_AVAILABLE=true
   fi
@@ -914,13 +966,14 @@ if tag_exists "$RELEASE_TAG"; then
 fi
 
 #####################################
-# Fastlane (checked above): install it, write the missing release notes for this version with
-# AI, then validate the store texts.
+# Fastlane (checked above): install it, download the store metadata if accepted above, write
+# the missing release notes for this version with AI, then validate the store texts.
 #####################################
 USE_FASTLANE=false
 if [ "$FASTLANE_AVAILABLE" = true ]; then
   info "Installing Fastlane..."
   bundle check > /dev/null 2>&1 || bundle install
+  download_store_metadata
   write_release_notes_if_needed
   # Fails before the long builds if a store text is too long.
   if fastfile_has_lane validate_metadata; then
