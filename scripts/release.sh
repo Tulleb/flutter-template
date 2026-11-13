@@ -1019,7 +1019,9 @@ elif [ "$BUILT_IOS" = true ]; then
   xcrun altool --upload-app --type ios -f build/ios/ipa/*.ipa --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
   success "Successfully uploaded to App Store Connect!"
 
-  if [ "$USE_FASTLANE" = true ]; then
+  if [ "$USE_FASTLANE" = true ] && [ -z "$(find "$(ios_metadata_dir)" -name '*.txt' 2>/dev/null | head -n 1)" ]; then
+    info "No App Store texts in $(ios_metadata_dir): write them in App Store Connect."
+  elif [ "$USE_FASTLANE" = true ]; then
     info "Pushing the App Store texts with Fastlane..."
     bundle exec fastlane ios metadata
     success "App Store texts pushed (not submitted for review)."
