@@ -463,6 +463,74 @@ if [ -n "$(git status --porcelain)" ]; then
 fi
 
 #####################################
+# Release files: the version, release notes and lockfiles the release changes, then commits.
+#####################################
+if [ "$PROJECT_TYPE" = "flutter" ]; then
+  RELEASE_PATHS=(
+    "pubspec.yaml"
+    "ios/Runner.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+    "ios/Runner.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+    "ios/Podfile.lock"
+  )
+else
+  RELEASE_PATHS=(
+    "$PBXPROJ"
+    "$XCODE_PROJECT/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+  )
+fi
+# Release notes written for this release (and any store text edited before releasing)
+RELEASE_PATHS+=("fastlane/metadata" "fastlane/release_notes_version.txt")
+
+#####################################
+# Atomic release: from here until the release commit, any exit (a choice to stop, an error,
+# Ctrl-C) puts the release files back as they were, so an aborted release leaves no version
+# bump or half-written release notes behind. Changes made before the release (the "Release
+# anyway" case above) are kept: the snapshot includes them.
+#####################################
+ROLLBACK_SNAPSHOT=$(git stash create 2>/dev/null || true)
+if [ -n "$ROLLBACK_SNAPSHOT" ]; then
+  # A stash commit's second parent holds the index (staged changes)
+  ROLLBACK_INDEX="$ROLLBACK_SNAPSHOT^2"
+else
+  ROLLBACK_SNAPSHOT=$(git rev-parse HEAD)
+  ROLLBACK_INDEX=$ROLLBACK_SNAPSHOT
+fi
+ROLLBACK_UNTRACKED=$(git ls-files --others --exclude-standard -- "${RELEASE_PATHS[@]}")
+ROLLBACK_ACTIVE=true
+
+rollback_release_files() {
+  [ "$ROLLBACK_ACTIVE" = true ] || return 0
+  ROLLBACK_ACTIVE=false
+  set +e
+  local changed=() created=() path
+  while IFS= read -r path; do
+    [ -n "$path" ] && changed+=("$path")
+  done < <(git diff --name-only "$ROLLBACK_SNAPSHOT" -- "${RELEASE_PATHS[@]}")
+  while IFS= read -r path; do
+    [ -n "$path" ] && ! grep -qxF "$path" <<< "$ROLLBACK_UNTRACKED" && created+=("$path")
+  done < <(git ls-files --others --exclude-standard -- "${RELEASE_PATHS[@]}")
+  if [ ${#changed[@]} -eq 0 ] && [ ${#created[@]} -eq 0 ]; then
+    return 0
+  fi
+  info "Rolling back the release files..."
+  if [ ${#changed[@]} -gt 0 ]; then
+    git restore --source="$ROLLBACK_INDEX" --staged -- "${changed[@]}"
+    git restore --source="$ROLLBACK_SNAPSHOT" --worktree -- "${changed[@]}"
+  fi
+  if [ ${#created[@]} -gt 0 ]; then
+    rm -f -- "${created[@]}"
+    for path in "${created[@]}"; do
+      rmdir -p "$(dirname "$path")" 2>/dev/null
+    done
+  fi
+  printf '  %s\n' "${changed[@]}" "${created[@]}"
+  success "Release files rolled back."
+}
+trap rollback_release_files EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+#####################################
 # Platform selection (Flutter projects with both platforms)
 #####################################
 if [ "$PROJECT_TYPE" = "flutter" ] && [ -d android ] && [ -d ios ]; then
@@ -870,21 +938,6 @@ fi
 # Commit the version, release notes and lockfiles (after the builds regenerate them)
 #####################################
 info "Staging release files for commit..."
-if [ "$PROJECT_TYPE" = "flutter" ]; then
-  RELEASE_PATHS=(
-    "pubspec.yaml"
-    "ios/Runner.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
-    "ios/Runner.xcworkspace/xcshareddata/swiftpm/Package.resolved"
-    "ios/Podfile.lock"
-  )
-else
-  RELEASE_PATHS=(
-    "$PBXPROJ"
-    "$XCODE_PROJECT/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
-  )
-fi
-# Release notes written for this release (and any store text edited before releasing)
-RELEASE_PATHS+=("fastlane/metadata" "fastlane/release_notes_version.txt")
 # Only the files in use exist (e.g. SwiftPM or CocoaPods lockfiles)
 for release_path in "${RELEASE_PATHS[@]}"; do
   if [ -e "$release_path" ]; then
@@ -900,10 +953,13 @@ if ! git diff --cached --quiet; then
   fi
   info "Creating commit '$COMMIT_MSG'..."
   git commit -m "$COMMIT_MSG"
+  # Committed: the release files are no longer rolled back on exit.
+  ROLLBACK_ACTIVE=false
   git push origin HEAD
   success "Successfully pushed commit '$COMMIT_MSG' to remote!"
 else
   info "No version, release notes or lockfile changes to commit."
+  ROLLBACK_ACTIVE=false
 fi
 
 #####################################
