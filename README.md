@@ -58,8 +58,8 @@ native iOS, through the symlinks above, and finds the project root from its own 
 4. Commits `Version <version>+<build>` (e.g. `Version 1.3+45`, `Version 1.3.1+46`) with the pubspec,
    release notes and iOS lockfiles, pushes it and tags it `<version>+<build>`.
 5. Uploads the IPA to App Store Connect and pushes the App Store texts of that version (no review
-   submission; skipped when `fastlane/metadata/ios` has none), then uploads the AAB with its notes as a draft on Google Play's internal testing
-   track. Without a valid Play key, or when the upload fails, the AAB is shown in Finder to upload
+   submission; skipped when `fastlane/metadata/ios` has none), then uploads the AAB with its notes as a draft on Google Play's production
+   track by default (the script asks: production, open, closed or internal testing); send it for review in Play Console. Without a valid Play key, or when the upload fails, the AAB is shown in Finder to upload
    it by hand, and its release notes for every language are copied to the clipboard (and opened)
    to paste into Play Console at once. Without a valid Android upload key
    (`android/key.properties`, see [Android upload key](#android-upload-key)), the release stops
@@ -241,7 +241,7 @@ Fastlane needs this key to upload builds and store listings to Google Play.
 3. Go to **IAM & Admin → Service Accounts → Create service account**, name it (e.g. `fastlane`) and skip the optional role step.
 4. Open the new service account, go to **Keys → Add key → Create new key → JSON**. A `.json` file is downloaded.
 5. In the [Google Play Console](https://play.google.com/console), go to **Users and permissions → Invite new users** and enter the service account's email (`…@….iam.gserviceaccount.com`).
-6. Under **App permissions**, add the app and allow **View app information**, **Release to testing tracks** and **Manage store presence**, then send the invitation.
+6. Under **App permissions**, add the app and allow **View app information**, **Release apps to production, exclude devices, and use Play App Signing**, **Release to testing tracks** and **Manage store presence**, then send the invitation.
 7. Move the key outside the repo and restrict its access:
 
    ```sh

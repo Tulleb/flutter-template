@@ -44,7 +44,9 @@ copy in a project.
      (default no).
    - Fastlane: native iOS projects need a `fastlane/Fastfile` with the `ios build` and
      `ios upload` lanes, and Bundler. With a Fastfile and Bundler on Android, a missing Google
-     Play key (`PLAY_STORE_JSON_KEY_PATH`) asks whether to upload the bundle manually later.
+     Play key (`PLAY_STORE_JSON_KEY_PATH`) asks whether to upload the bundle manually later;
+     with a valid key, it asks which Play track gets the draft (production by default, open,
+     closed or internal testing).
 5. Reads the version. Releases are tagged `<version>+<build>`, where a `.0` patch is dropped and
    any other patch kept (`1.3+45`, `1.3.1+46`): pubspec.yaml keeps `1.3.0` (Flutter needs x.y.z)
    while the stores, tag and commit use `1.3`. A project whose tags already use
@@ -67,7 +69,8 @@ copy in a project.
 10. Uploads. Native iOS: `fastlane ios upload`. Flutter: the IPA with `xcrun altool`, then
     `fastlane ios metadata` pushes the App Store texts for that version (never submits for
     review; skipped, with a note to write them in App Store Connect, when
-    `fastlane/metadata/ios` holds no texts); `fastlane android upload` sends the AAB as a draft on the internal testing track
+    `fastlane/metadata/ios` holds no texts); `fastlane android upload` sends the AAB as a draft on the track chosen at the start
+    (production by default; nothing is sent for review)
     with its notes. When the Play upload is not possible or fails (except when Play refuses the
     signing key, which stops the release), the AAB is shown in Finder for a manual Play Console
     upload, and the Play notes of every locale are copied to the clipboard and opened, in the
@@ -83,7 +86,7 @@ Hooks receive `RELEASE_VERSION`, `RELEASE_BUILD` and `RELEASE_TAG`.
 - Flutter: `fastlane/Fastfile` is shared by every project (symlink to the Flutter template); only
   `fastlane/Appfile` (identifiers) and `Gemfile`/`Gemfile.lock` belong to the project. Lanes:
   `validate_metadata` (offline length checks), `ios metadata` (App Store texts and screenshots),
-  `android metadata` (Play listing only), `android upload` (AAB + notes, internal draft).
+  `android metadata` (Play listing only), `android upload` (AAB + notes, production draft).
 - Native iOS: the project owns its Fastfile and must keep the `ios build` and `ios upload` lanes.
 - Only the files that exist are pushed: a project versions just the release notes, or the full
   listings too (texts, Play images, iOS screenshots in `fastlane/screenshots/ios/<locale>`).
