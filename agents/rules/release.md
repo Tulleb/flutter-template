@@ -23,6 +23,10 @@ copy in a project.
 2. Loads `.secret.local` (never committed; see `.secret.local.example`).
 3. Warns when the working tree has uncommitted changes, which would ship without being in the
    release commit.
+   From here until the release commit (step 9), any exit (a "no" to a prompt, an error, Ctrl-C)
+   rolls back the release files it changed (version file, `fastlane/metadata`,
+   `fastlane/release_notes_version.txt`, lockfiles) to their state at this point, through an
+   `EXIT` trap; changes made before the release are kept.
 4. Flutter: asks for the platforms (Android and iOS, iOS only, Android only). With iOS, the App
    Store Connect API key must be complete (`APP_STORE_CONNECT_API_KEY` /
    `APP_STORE_CONNECT_APP_ISSUER_ID` / `APP_STORE_CONNECT_API_KEY_PATH`, or the

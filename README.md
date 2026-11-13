@@ -70,8 +70,10 @@ the script still builds, tags and uploads the IPA, and opens the AAB in Finder. 
 described for AI agents in `agents/rules/release.md`.
 
 Before building, it warns when the working tree has uncommitted changes (they would ship without
-being in the release commit). Projects can add steps in `scripts/release-hooks/pre-build.sh`
-(after the release notes, before the build; a failure stops the release) and
+being in the release commit). The release is atomic up to its commit: any exit before it (a
+"no" to a prompt, an error, Ctrl-C) rolls back the version, release notes and lockfiles it
+changed, keeping changes made before the release. Projects can add steps in
+`scripts/release-hooks/pre-build.sh` (after the release notes, before the build; a failure stops the release) and
 `scripts/release-hooks/post-upload.sh`, which receive `RELEASE_VERSION`, `RELEASE_BUILD` and
 `RELEASE_TAG`; files they stage go into the release commit.
 
