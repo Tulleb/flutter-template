@@ -20,13 +20,15 @@ copy in a project.
 
 1. Asks what to release (mobile or web, the web option only in Flutter projects with
    `lib/main_web.dart`).
-2. Loads `.secret.local` (never committed; see `.secret.local.example`) and checks the App Store
-   Connect API key (`APP_STORE_CONNECT_API_KEY` / `APP_STORE_CONNECT_APP_ISSUER_ID` /
-   `APP_STORE_CONNECT_API_KEY_PATH`, or the `APP_STORE_CONNECT_API_KEY_KEY_ID` / `_ISSUER_ID` /
-   `_KEY_FILEPATH` naming).
+2. Loads `.secret.local` (never committed; see `.secret.local.example`).
 3. Warns when the working tree has uncommitted changes, which would ship without being in the
    release commit.
-4. Flutter: asks for the platforms (Android and iOS, iOS only, Android only). With Android,
+4. Flutter: asks for the platforms (Android and iOS, iOS only, Android only). With iOS, the App
+   Store Connect API key must be complete (`APP_STORE_CONNECT_API_KEY` /
+   `APP_STORE_CONNECT_APP_ISSUER_ID` / `APP_STORE_CONNECT_API_KEY_PATH`, or the
+   `APP_STORE_CONNECT_API_KEY_KEY_ID` / `_ISSUER_ID` / `_KEY_FILEPATH` naming; Flutter needs the
+   file named `AuthKey_<key id>.p8` for altool): otherwise the release stops with an error before
+   changing anything. Android-only releases don't need it. With Android,
    `android/key.properties` must hold a usable upload key (`android/app/upload-keystore.jks`,
    credentials from the app's 1Password item): otherwise the release stops before changing
    anything. After the Android build, it checks that the bundle is signed with that key, and
