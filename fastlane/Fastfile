@@ -147,7 +147,9 @@ platform :android do
     {
       json_key: File.expand_path(json_key, ".."),
       metadata_path: ANDROID_METADATA,
-      # The listing texts and images are pushed only when the project versions them.
+      # The release notes, listing texts and images are pushed only when the project versions
+      # them: supply fails when fastlane/metadata/android is missing and any of these is pushed.
+      skip_upload_changelogs: !any_file?("metadata/android/*/changelogs/*.txt"),
       skip_upload_metadata: !any_file?("metadata/android/*/{title,short_description,full_description}.txt"),
       skip_upload_images: !any_file?("metadata/android/*/images/*.{png,jpg,jpeg}"),
       skip_upload_screenshots: !any_file?("metadata/android/*/images/*Screenshots/*.{png,jpg,jpeg}"),
