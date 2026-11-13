@@ -1,0 +1,3 @@
+# Copy to fastlane/Appfile and set the app's identifiers (ios/Runner bundle id, android applicationId).
+app_identifier("com.example.app")
+package_name("com.example.app")

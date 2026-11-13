@@ -1,0 +1,8 @@
+# Copy to android/key.properties (never committed) and fill it in from the app's 1Password item,
+# whose upload-keystore.jks goes into android/app (never committed either). Read by
+# android/app/build.gradle.kts to sign release builds with the Google Play upload key; storeFile
+# is resolved from android/app. See the Flutter template README → "Android upload key".
+storeFile=upload-keystore.jks
+storePassword=
+keyAlias=upload
+keyPassword=

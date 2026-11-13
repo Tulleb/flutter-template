@@ -9,6 +9,18 @@
 .secret.local
 private_keys
 secrets
+__pycache__/
+
+# Release (scripts/release.sh, Fastlane)
+/.bundle/
+/vendor/bundle/
+android/key.properties
+*.jks
+*.keystore
+fastlane/report.xml
+fastlane/README.md
+fastlane/Preview.html
+fastlane/test_output
 
 # Flutter repo-specific
 /bin/cache/
