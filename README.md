@@ -58,7 +58,7 @@ native iOS, through the symlinks above, and finds the project root from its own 
 4. Commits `Version <version>+<build>` (e.g. `Version 1.3+45`, `Version 1.3.1+46`) with the pubspec,
    release notes and iOS lockfiles, pushes it and tags it `<version>+<build>`.
 5. Uploads the IPA to App Store Connect and pushes the App Store texts of that version (no review
-   submission), then uploads the AAB with its notes as a draft on Google Play's internal testing
+   submission; skipped when `fastlane/metadata/ios` has none), then uploads the AAB with its notes as a draft on Google Play's internal testing
    track. Without a valid Play key, or when the upload fails, the AAB is shown in Finder to upload
    it by hand, and its release notes for every language are copied to the clipboard (and opened)
    to paste into Play Console at once. Without a valid Android upload key

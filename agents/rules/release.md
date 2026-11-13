@@ -66,7 +66,8 @@ copy in a project.
    and the lockfiles, pushes it, then tags and pushes the release, before any upload.
 10. Uploads. Native iOS: `fastlane ios upload`. Flutter: the IPA with `xcrun altool`, then
     `fastlane ios metadata` pushes the App Store texts for that version (never submits for
-    review); `fastlane android upload` sends the AAB as a draft on the internal testing track
+    review; skipped, with a note to write them in App Store Connect, when
+    `fastlane/metadata/ios` holds no texts); `fastlane android upload` sends the AAB as a draft on the internal testing track
     with its notes. When the Play upload is not possible or fails (except when Play refuses the
     signing key, which stops the release), the AAB is shown in Finder for a manual Play Console
     upload, and the Play notes of every locale are copied to the clipboard and opened, in the
