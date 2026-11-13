@@ -13,8 +13,9 @@ script writes; the project file wins when they disagree.
 
 ## Content
 
-- Range: the commits since the last release tag (`X.Y+B` or `X.Y.Z+B`, written by
-  `scripts/release.sh`). Keep user-facing changes only; skip tests, tooling, CI, release scripts,
+- Range: the commits since the last release tag of an earlier version (`X.Y+B` or `X.Y.Z+B`,
+  written by `scripts/release.sh`): on a build-only bump, the whole version, not just the last
+  build. Keep user-facing changes only; skip tests, tooling, CI, release scripts,
   fastlane, agent rules, dependency bumps, refactors and version bumps. Check each entry against
   the diff and the new strings, not just the commit title.
 - Mark a feature as paid (Pro, Premium…) only when the code gates it.

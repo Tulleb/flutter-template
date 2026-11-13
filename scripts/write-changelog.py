@@ -8,8 +8,9 @@ being released; can also be run by hand from the project root:
 The model follows scripts/changelog-format.md (shared rules, next to this script in the Flutter
 template), then the project's fastlane/changelog-context.md when it exists, in two passes:
 
-1. It reads the commits since the last release tag (messages, file stats and trimmed diffs, plus
-   the commit messages of related repositories) and writes the reference notes (en-US when the
+1. It reads the commits since the last release tag of an earlier version (builds of the version
+   being released are skipped, so a build-only bump still covers the whole version; messages,
+   file stats and trimmed diffs, plus the commit messages of related repositories) and writes the reference notes (en-US when the
    project has it, else its first store locale): a full text for the App Store and a short one
    for Google Play, plus the exact screen, feature and setting names it used.
 2. Those names are looked up in the app's translations (Flutter .arb files from l10n.yaml, or
@@ -29,7 +30,7 @@ repositories, relative to the project, whose commit messages over the same perio
 comma-separated). Each setting comes from the environment (release.sh loads .secret.local), else
 from the project's .env.
 
-Exit codes: 0 written, 1 failed, 3 nothing to write (no previous release tag or no store locale).
+Exit codes: 0 written, 1 failed, 3 nothing to write (no release tag of an earlier version or no store locale).
 """
 
 import json
@@ -126,11 +127,20 @@ def store_locales(store):
                   if p.is_dir() and LOCALE_PATTERN.fullmatch(p.name))
 
 
+def same_version(a, b):
+    """True when two X.Y[.Z] versions are equal, a ".0" patch ignored (7.1.0 is 7.1)."""
+    return re.sub(r"^(\d+\.\d+)\.0$", r"\1", a) == re.sub(r"^(\d+\.\d+)\.0$", r"\1", b)
+
+
 def previous_tag(version, build):
-    """The latest release tag (1.3+45, 7.3_15 or 7.3) other than the one being released."""
+    """The latest release tag (1.3+45, 7.3_15 or 7.3) of an earlier version than the one being
+    released: on a build-only bump (1.3+46 after 1.3+45), the notes still cover every change since
+    the previous version, not just since the last build."""
     current = {os.environ.get("RELEASE_TAG", ""), f"{version}+{build}", f"{version}_{build}"}
     for tag in git("tag", "--sort=-creatordate").split():
-        if RELEASE_TAG_PATTERN.fullmatch(tag) and tag not in current:
+        if not RELEASE_TAG_PATTERN.fullmatch(tag) or tag in current:
+            continue
+        if not same_version(re.split(r"[+_]", tag)[0], version):
             return tag
     return None
 
@@ -368,7 +378,7 @@ def main():
         skip("No store locale in fastlane/metadata/ios or fastlane/metadata/android: no notes to write.")
     tag = previous_tag(version, build)
     if tag is None:
-        skip("No previous release tag: first release, no notes to write.")
+        skip("No release tag of an earlier version: first release, no notes to write.")
 
     api_key = env_setting("OPENAI_API_KEY") or fail(
         "OPENAI_API_KEY is missing: add it to .secret.local to write the notes automatically.")
