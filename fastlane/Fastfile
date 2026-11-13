@@ -165,15 +165,16 @@ platform :android do
     )
   end
 
-  desc "Upload the release app bundle as a draft on the internal testing track, with its release"
+  desc "Upload the release app bundle as a draft on the production track (or PLAY_STORE_TRACK), with its release"
   desc "notes (changelogs/<build number>.txt, or changelogs/default.txt) and the listing when versioned"
+  desc "(PLAY_STORE_TRACK: production, beta, alpha or internal; scripts/release.sh asks for it)"
   lane :upload do
     validate_metadata
     UI.user_error!("No app bundle at #{ANDROID_BUNDLE}, run `flutter build appbundle` first") unless File.exist?("../#{ANDROID_BUNDLE}")
     upload_to_play_store(
       **play_options,
       aab: ANDROID_BUNDLE,
-      track: "internal",
+      track: ENV["PLAY_STORE_TRACK"].to_s.strip.empty? ? "production" : ENV["PLAY_STORE_TRACK"].strip,
       release_status: "draft",
       version_name: "#{store_version} (#{pubspec_version[:build]})",
     )

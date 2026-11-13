@@ -256,7 +256,7 @@ offer_manual_android_play_upload() {
     return 1
   fi
   info "Opening the Android App Bundle in Finder..."
-  info "Upload it in Play Console → Testing → Internal testing (or your track) → Create new release."
+  info "Upload it in Play Console → Test and release → ${PLAY_STORE_TRACK_NAME:-Production} (or your track) → Create new release."
   open_android_aab_in_finder
   success "AAB ready for manual upload to Google Play Console."
   return 0
@@ -698,9 +698,29 @@ if [ -f fastlane/Fastfile ]; then
     error "WARNING: fastlane/Fastfile found but Bundler is not installed: store texts will not be pushed."
   else
     if [[ " ${PLATFORMS[*]} " == *" android "* ]]; then
-      info "On Android, Fastlane uploads the app bundle as a draft on the internal testing track."
       if play_store_json_key_is_valid; then
         USE_ANDROID_FASTLANE=true
+        echo ""
+        info "Which Google Play track should the Android draft be uploaded to?"
+        echo "1) Production (default)"
+        echo "2) Open testing"
+        echo "3) Closed testing"
+        echo "4) Internal testing"
+        read -p "Choose an option (1-4) [1]: " track_choice
+        track_choice=${track_choice:-1}
+        case $track_choice in
+          1) PLAY_STORE_TRACK="production"; PLAY_STORE_TRACK_NAME="Production" ;;
+          2) PLAY_STORE_TRACK="beta"; PLAY_STORE_TRACK_NAME="Open testing" ;;
+          3) PLAY_STORE_TRACK="alpha"; PLAY_STORE_TRACK_NAME="Closed testing" ;;
+          4) PLAY_STORE_TRACK="internal"; PLAY_STORE_TRACK_NAME="Internal testing" ;;
+          *)
+            error "Invalid option. Exiting."
+            exit 1
+            ;;
+        esac
+        # Read by the `android upload` lane.
+        export PLAY_STORE_TRACK
+        info "Fastlane will upload the app bundle as a draft on the $PLAY_STORE_TRACK_NAME track (send it for review in Play Console)."
       else
         error "WARNING: PLAY_STORE_JSON_KEY_PATH is missing, empty, or not a readable file."
         info "Automatic Play Store upload is unavailable: you can upload the Android AAB manually after the build."
@@ -1035,7 +1055,7 @@ fi
 #####################################
 if [ "$BUILT_ANDROID" = true ]; then
   if [ "$USE_ANDROID_FASTLANE" = true ]; then
-    info "Uploading to Google Play (internal testing, draft) with Fastlane..."
+    info "Uploading to Google Play ($PLAY_STORE_TRACK_NAME track, draft) with Fastlane..."
     ANDROID_UPLOAD_LOG=$(mktemp)
     set +e
     bundle exec fastlane android upload 2>&1 | tee "$ANDROID_UPLOAD_LOG"
@@ -1055,7 +1075,7 @@ if [ "$BUILT_ANDROID" = true ]; then
   elif [ "$USE_FASTLANE" = true ]; then
     # Fastlane used for iOS; Android is manual (user already agreed when the Play key was invalid).
     info "Opening the Android App Bundle in Finder for manual Play Console upload..."
-    info "Upload it in Play Console → Testing → Internal testing (or your track) → Create new release."
+    info "Upload it in Play Console → Test and release → ${PLAY_STORE_TRACK_NAME:-Production} (or your track) → Create new release."
     open_android_aab_in_finder
     success "AAB ready for manual upload to Google Play Console."
   fi
