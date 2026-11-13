@@ -572,6 +572,27 @@ else
 fi
 
 #####################################
+# Xcode (Flutter iOS builds): checked before anything changes rather than after La Totale and the
+# Android build.
+#####################################
+if [ "$PROJECT_TYPE" = "flutter" ] && [[ " ${PLATFORMS[*]} " == *" ios "* ]] \
+  && ! command -v xcodebuild &> /dev/null; then
+  error "ERROR: Xcode is not installed or not in PATH."
+  if [[ " ${PLATFORMS[*]} " == *" android "* ]]; then
+    read -p "Release Android only? (y/n) [n]: " android_only_choice
+    android_only_choice=${android_only_choice:-n}
+    if [[ ! "$android_only_choice" =~ ^[Yy]$ ]]; then
+      info "Exiting..."
+      exit 0
+    fi
+    PLATFORMS=("android")
+    info "Selected platform: Android only"
+  else
+    exit 1
+  fi
+fi
+
+#####################################
 # App Store Connect API key. Two namings are accepted: APP_STORE_CONNECT_API_KEY /
 # APP_STORE_CONNECT_APP_ISSUER_ID / APP_STORE_CONNECT_API_KEY_PATH (the template's), or
 # APP_STORE_CONNECT_API_KEY_KEY_ID / _ISSUER_ID / _KEY_FILEPATH. The file defaults to
@@ -629,6 +650,70 @@ fi
 #####################################
 if [[ " ${PLATFORMS[*]} " == *" android "* ]]; then
   check_android_upload_key
+fi
+
+#####################################
+# Optional dart_defines.json (compile-time defines such as RevenueCat). Checked before anything
+# changes, ahead of the release notes, Fastlane and the long builds.
+#####################################
+DART_DEFINE_ARGS=()
+if [ "$PROJECT_TYPE" = "flutter" ]; then
+  if [ -f dart_defines.json ]; then
+    DART_DEFINE_ARGS+=(--dart-define-from-file=dart_defines.json)
+    info "Using dart_defines.json for compile-time defines (incl. RevenueCat)."
+  else
+    error "WARNING: dart_defines.json not found."
+    info "Dependencies such as RevenueCat will not fully work without it."
+    read -p "Continue without dart_defines.json? (y/n) [n]: " continue_without_defines
+    continue_without_defines=${continue_without_defines:-n}
+    if [[ ! "$continue_without_defines" =~ ^[Yy]$ ]]; then
+      info "Exiting..."
+      exit 0
+    fi
+    info "Continuing without dart_defines.json."
+  fi
+fi
+
+#####################################
+# Fastlane: store texts and uploads. Flutter projects use it when fastlane/Fastfile exists and
+# Bundler is installed (otherwise the IPA is still uploaded with altool and the AAB shown in
+# Finder); native iOS projects need it to build and upload. Only checked here: it is installed
+# later, once the version is set.
+#####################################
+FASTLANE_AVAILABLE=false
+# When true, Android AAB is uploaded via Fastlane after the commit; otherwise Finder opens.
+USE_ANDROID_FASTLANE=false
+if [ "$PROJECT_TYPE" = "ios" ]; then
+  if [ ! -f fastlane/Fastfile ] || ! fastfile_has_lane build || ! fastfile_has_lane upload; then
+    error "ERROR: Native iOS projects need a fastlane/Fastfile with the 'ios build' and 'ios upload' lanes."
+    exit 1
+  fi
+  if ! command -v bundle &> /dev/null; then
+    error "ERROR: Bundler is not installed (gem install bundler)."
+    exit 1
+  fi
+fi
+if [ -f fastlane/Fastfile ]; then
+  if ! command -v bundle &> /dev/null; then
+    error "WARNING: fastlane/Fastfile found but Bundler is not installed: store texts will not be pushed."
+  else
+    if [[ " ${PLATFORMS[*]} " == *" android "* ]]; then
+      info "On Android, Fastlane uploads the app bundle as a draft on the internal testing track."
+      if play_store_json_key_is_valid; then
+        USE_ANDROID_FASTLANE=true
+      else
+        error "WARNING: PLAY_STORE_JSON_KEY_PATH is missing, empty, or not a readable file."
+        info "Automatic Play Store upload is unavailable: you can upload the Android AAB manually after the build."
+        read -p "Continue and upload Android manually later? (y/n) [y]: " manual_android_choice
+        manual_android_choice=${manual_android_choice:-y}
+        if [[ ! "$manual_android_choice" =~ ^[Yy]$ ]]; then
+          info "Exiting..."
+          exit 0
+        fi
+      fi
+    fi
+    FASTLANE_AVAILABLE=true
+  fi
 fi
 
 #####################################
@@ -809,53 +894,20 @@ if tag_exists "$RELEASE_TAG"; then
 fi
 
 #####################################
-# Fastlane: store texts and uploads. Flutter projects use it when fastlane/Fastfile exists and
-# Bundler is installed (otherwise the IPA is still uploaded with altool and the AAB shown in
-# Finder); native iOS projects need it to build and upload. Missing release notes for this
-# version are written with AI first.
+# Fastlane (checked above): install it, write the missing release notes for this version with
+# AI, then validate the store texts.
 #####################################
 USE_FASTLANE=false
-# When true, Android AAB is uploaded via Fastlane after the commit; otherwise Finder opens.
-USE_ANDROID_FASTLANE=false
-if [ "$PROJECT_TYPE" = "ios" ]; then
-  if [ ! -f fastlane/Fastfile ] || ! fastfile_has_lane build || ! fastfile_has_lane upload; then
-    error "ERROR: Native iOS projects need a fastlane/Fastfile with the 'ios build' and 'ios upload' lanes."
-    exit 1
+if [ "$FASTLANE_AVAILABLE" = true ]; then
+  info "Installing Fastlane..."
+  bundle check > /dev/null 2>&1 || bundle install
+  write_release_notes_if_needed
+  # Fails before the long builds if a store text is too long.
+  if fastfile_has_lane validate_metadata; then
+    bundle exec fastlane validate_metadata
   fi
-  if ! command -v bundle &> /dev/null; then
-    error "ERROR: Bundler is not installed (gem install bundler)."
-    exit 1
-  fi
-fi
-if [ -f fastlane/Fastfile ]; then
-  if ! command -v bundle &> /dev/null; then
-    error "WARNING: fastlane/Fastfile found but Bundler is not installed: store texts will not be pushed."
-  else
-    if [[ " ${PLATFORMS[*]} " == *" android "* ]]; then
-      info "On Android, Fastlane uploads the app bundle as a draft on the internal testing track."
-      if play_store_json_key_is_valid; then
-        USE_ANDROID_FASTLANE=true
-      else
-        error "WARNING: PLAY_STORE_JSON_KEY_PATH is missing, empty, or not a readable file."
-        info "Automatic Play Store upload is unavailable: you can upload the Android AAB manually after the build."
-        read -p "Continue and upload Android manually later? (y/n) [y]: " manual_android_choice
-        manual_android_choice=${manual_android_choice:-y}
-        if [[ ! "$manual_android_choice" =~ ^[Yy]$ ]]; then
-          info "Exiting..."
-          exit 0
-        fi
-      fi
-    fi
-    info "Installing Fastlane..."
-    bundle check > /dev/null 2>&1 || bundle install
-    write_release_notes_if_needed
-    # Fails before the long builds if a store text is too long.
-    if fastfile_has_lane validate_metadata; then
-      bundle exec fastlane validate_metadata
-    fi
-    USE_FASTLANE=true
-    success "Fastlane is ready."
-  fi
+  USE_FASTLANE=true
+  success "Fastlane is ready."
 fi
 
 run_release_hook pre-build
@@ -871,23 +923,6 @@ if [ "$PROJECT_TYPE" = "ios" ]; then
   success "iOS build finished successfully."
   BUILT_IOS=true
 else
-  # Optional dart_defines.json
-  DART_DEFINE_ARGS=()
-  if [ -f dart_defines.json ]; then
-    DART_DEFINE_ARGS+=(--dart-define-from-file=dart_defines.json)
-    info "Using dart_defines.json for compile-time defines (incl. RevenueCat)."
-  else
-    error "WARNING: dart_defines.json not found."
-    info "Dependencies such as RevenueCat will not fully work without it."
-    read -p "Continue without dart_defines.json? (y/n) [n]: " continue_without_defines
-    continue_without_defines=${continue_without_defines:-n}
-    if [[ ! "$continue_without_defines" =~ ^[Yy]$ ]]; then
-      info "Exiting..."
-      exit 0
-    fi
-    info "Continuing without dart_defines.json."
-  fi
-
   info "Starting La Totale..."
   ./scripts/la-totale.sh
   success "La Totale finished successfully."
@@ -908,10 +943,6 @@ else
         fi
         ;;
       "ios")
-        if ! command -v xcodebuild &> /dev/null; then
-          error "ERROR: Xcode is not installed or not in PATH. Skipping iOS build."
-          continue
-        fi
         info "Building iOS app bundle..."
         # Upload happens after the version/lockfile commit
         rm -rf build/ios/ipa
