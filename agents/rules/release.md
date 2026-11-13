@@ -71,7 +71,7 @@ copy in a project.
     review; skipped, with a note to write them in App Store Connect, when
     `fastlane/metadata/ios` holds no texts); `fastlane android upload` sends the AAB as a draft on the track chosen at the start
     (production by default; nothing is sent for review)
-    with its notes. When the Play upload is not possible or fails (except when Play refuses the
+    with its notes (the bundle alone when `fastlane/metadata/android` holds none). When the Play upload is not possible or fails (except when Play refuses the
     signing key, which stops the release), the AAB is shown in Finder for a manual Play Console
     upload, and the Play notes of every locale are copied to the clipboard and opened, in the
     Console's `<locale>…</locale>` format (`build/app/outputs/bundle/release/release-notes.txt`).
