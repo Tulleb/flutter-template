@@ -118,6 +118,16 @@ Keep the topic rules generic and reusable as they are shared accross Flutter pro
 
 **Keywords:** accessibility, a11y, semantics, screen reader, contrast, scaling
 
+### 🚀 release.md - Releases
+
+**Load when:**
+
+- Preparing or debugging a release
+- working on `scripts/release.sh`, Fastlane, store listings or release notes
+- changing the version, signing or store credentials
+
+**Keywords:** release, version, build number, tag, fastlane, app store, google play, testflight, metadata, changelog, release notes, signing
+
 ### When working on a new feature
 
 Load: `interaction-guidelines.md`, `project-structure.md`, `best-practices.md`, `ui-ux.md`, `localizations.md`
