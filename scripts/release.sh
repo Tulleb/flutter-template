@@ -15,6 +15,10 @@
 # after the uploads), then a release commit and tag pushed before any upload. Full description in
 # the Flutter template README ("Releases") and agents/rules/release.md.
 
+# The whole script is one { ... } block: bash parses it all before running, so editing this file
+# (or pulling a new version of it) during a release cannot make the running release execute garbage.
+{
+
 # Exit immediately on any error
 set -e
 
@@ -444,48 +448,6 @@ source .secret.local
 set +a
 
 #####################################
-# App Store Connect API key. Two namings are accepted: APP_STORE_CONNECT_API_KEY /
-# APP_STORE_CONNECT_APP_ISSUER_ID / APP_STORE_CONNECT_API_KEY_PATH (the template's), or
-# APP_STORE_CONNECT_API_KEY_KEY_ID / _ISSUER_ID / _KEY_FILEPATH. The file defaults to
-# AuthKey_<key id>.p8 in altool's folders.
-#####################################
-info "Validating the App Store Connect API key..."
-ASC_KEY_ID="${APP_STORE_CONNECT_API_KEY_KEY_ID:-${APP_STORE_CONNECT_API_KEY:-}}"
-ASC_ISSUER_ID="${APP_STORE_CONNECT_API_KEY_ISSUER_ID:-${APP_STORE_CONNECT_APP_ISSUER_ID:-}}"
-ASC_KEY_PATH="${APP_STORE_CONNECT_API_KEY_KEY_FILEPATH:-${APP_STORE_CONNECT_API_KEY_PATH:-}}"
-if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ]; then
-  error "ERROR: APP_STORE_CONNECT_API_KEY and APP_STORE_CONNECT_APP_ISSUER_ID must be set in .secret.local."
-  exit 1
-fi
-if [ -n "$ASC_KEY_PATH" ]; then
-  ASC_KEY_PATH="${ASC_KEY_PATH/#\~/$HOME}"
-  [[ "$ASC_KEY_PATH" == /* ]] || ASC_KEY_PATH="$PROJECT_ROOT/${ASC_KEY_PATH#./}"
-else
-  for dir in ./private_keys "$HOME/private_keys" "$HOME/.private_keys" "$HOME/.appstoreconnect/private_keys"; do
-    if [ -f "$dir/AuthKey_$ASC_KEY_ID.p8" ]; then
-      ASC_KEY_PATH="$(cd "$dir" && pwd)/AuthKey_$ASC_KEY_ID.p8"
-      break
-    fi
-  done
-fi
-if [ -z "$ASC_KEY_PATH" ] || [ ! -f "$ASC_KEY_PATH" ]; then
-  error "ERROR: App Store Connect API key file not found: set APP_STORE_CONNECT_API_KEY_PATH in .secret.local."
-  exit 1
-fi
-export APP_STORE_CONNECT_API_KEY_KEY_ID="$ASC_KEY_ID"
-export APP_STORE_CONNECT_API_KEY_ISSUER_ID="$ASC_ISSUER_ID"
-export APP_STORE_CONNECT_API_KEY_KEY_FILEPATH="$ASC_KEY_PATH"
-if [ "$PROJECT_TYPE" = "flutter" ]; then
-  export APP_STORE_CONNECT_API_KEY="$ASC_KEY_ID"
-  export APP_STORE_CONNECT_APP_ISSUER_ID="$ASC_ISSUER_ID"
-  export APP_STORE_CONNECT_API_KEY_PATH="$ASC_KEY_PATH"
-else
-  # Fastlane reserves APP_STORE_CONNECT_API_KEY for its api_key Hash: never the key id there.
-  unset APP_STORE_CONNECT_API_KEY
-fi
-success "App Store Connect API key found."
-
-#####################################
 # Uncommitted changes would be built but left out of the release commit and tag.
 #####################################
 if [ -n "$(git status --porcelain)" ]; then
@@ -539,6 +501,57 @@ elif [ "$PROJECT_TYPE" = "flutter" ] && [ -d android ]; then
   PLATFORMS=("android")
 else
   PLATFORMS=("ios")
+fi
+
+#####################################
+# App Store Connect API key. Two namings are accepted: APP_STORE_CONNECT_API_KEY /
+# APP_STORE_CONNECT_APP_ISSUER_ID / APP_STORE_CONNECT_API_KEY_PATH (the template's), or
+# APP_STORE_CONNECT_API_KEY_KEY_ID / _ISSUER_ID / _KEY_FILEPATH. The file defaults to
+# AuthKey_<key id>.p8 in altool's folders. Checked whenever iOS is released: a missing or
+# misnamed key stops the release before anything changes.
+#####################################
+if [[ " ${PLATFORMS[*]} " == *" ios "* ]]; then
+  info "Validating the App Store Connect API key..."
+  ASC_KEY_ID="${APP_STORE_CONNECT_API_KEY_KEY_ID:-${APP_STORE_CONNECT_API_KEY:-}}"
+  ASC_ISSUER_ID="${APP_STORE_CONNECT_API_KEY_ISSUER_ID:-${APP_STORE_CONNECT_APP_ISSUER_ID:-}}"
+  ASC_KEY_PATH="${APP_STORE_CONNECT_API_KEY_KEY_FILEPATH:-${APP_STORE_CONNECT_API_KEY_PATH:-}}"
+  if [ -z "$ASC_KEY_ID" ] || [ -z "$ASC_ISSUER_ID" ]; then
+    error "ERROR: APP_STORE_CONNECT_API_KEY and APP_STORE_CONNECT_APP_ISSUER_ID must be set in .secret.local."
+    exit 1
+  fi
+  if [ -n "$ASC_KEY_PATH" ]; then
+    ASC_KEY_PATH="${ASC_KEY_PATH/#\~/$HOME}"
+    [[ "$ASC_KEY_PATH" == /* ]] || ASC_KEY_PATH="$PROJECT_ROOT/${ASC_KEY_PATH#./}"
+  else
+    for dir in ./private_keys "$HOME/private_keys" "$HOME/.private_keys" "$HOME/.appstoreconnect/private_keys"; do
+      if [ -f "$dir/AuthKey_$ASC_KEY_ID.p8" ]; then
+        ASC_KEY_PATH="$(cd "$dir" && pwd)/AuthKey_$ASC_KEY_ID.p8"
+        break
+      fi
+    done
+  fi
+  if [ -z "$ASC_KEY_PATH" ] || [ ! -f "$ASC_KEY_PATH" ]; then
+    error "ERROR: App Store Connect API key file not found: set APP_STORE_CONNECT_API_KEY_PATH in .secret.local."
+    exit 1
+  fi
+  export APP_STORE_CONNECT_API_KEY_KEY_ID="$ASC_KEY_ID"
+  export APP_STORE_CONNECT_API_KEY_ISSUER_ID="$ASC_ISSUER_ID"
+  export APP_STORE_CONNECT_API_KEY_KEY_FILEPATH="$ASC_KEY_PATH"
+  if [ "$PROJECT_TYPE" = "flutter" ]; then
+    export APP_STORE_CONNECT_API_KEY="$ASC_KEY_ID"
+    export APP_STORE_CONNECT_APP_ISSUER_ID="$ASC_ISSUER_ID"
+    export APP_STORE_CONNECT_API_KEY_PATH="$ASC_KEY_PATH"
+  else
+    # Fastlane reserves APP_STORE_CONNECT_API_KEY for its api_key Hash: never the key id there.
+    unset APP_STORE_CONNECT_API_KEY
+  fi
+  # altool ignores APP_STORE_CONNECT_API_KEY_PATH; it only searches fixed dirs (./private_keys,
+  # ~/private_keys, …) or $API_PRIVATE_KEYS_DIR for AuthKey_<key id>.p8.
+  if [ "$PROJECT_TYPE" = "flutter" ] && [ "$(basename "$ASC_KEY_PATH")" != "AuthKey_${ASC_KEY_ID}.p8" ]; then
+    error "ERROR: The App Store Connect key file must be named 'AuthKey_${ASC_KEY_ID}.p8' (got '$(basename "$ASC_KEY_PATH")')."
+    exit 1
+  fi
+  success "App Store Connect API key found."
 fi
 
 #####################################
@@ -790,10 +803,6 @@ if [ "$PROJECT_TYPE" = "ios" ]; then
   success "iOS build finished successfully."
   BUILT_IOS=true
 else
-  info "Starting La Totale..."
-  ./scripts/la-totale.sh
-  success "La Totale finished successfully."
-
   # Optional dart_defines.json
   DART_DEFINE_ARGS=()
   if [ -f dart_defines.json ]; then
@@ -810,6 +819,10 @@ else
     fi
     info "Continuing without dart_defines.json."
   fi
+
+  info "Starting La Totale..."
+  ./scripts/la-totale.sh
+  success "La Totale finished successfully."
 
   for platform in "${PLATFORMS[@]}"; do
     case $platform in
@@ -911,12 +924,8 @@ if [ "$BUILT_IOS" = true ] && [ "$PROJECT_TYPE" = "ios" ]; then
   bundle exec fastlane ios upload
   success "Successfully uploaded to App Store Connect!"
 elif [ "$BUILT_IOS" = true ]; then
-  # altool ignores APP_STORE_CONNECT_API_KEY_PATH; it only searches fixed dirs (./private_keys,
-  # ~/private_keys, …) or $API_PRIVATE_KEYS_DIR for AuthKey_<key id>.p8.
-  if [ "$(basename "$ASC_KEY_PATH")" != "AuthKey_${ASC_KEY_ID}.p8" ]; then
-    error "ERROR: The App Store Connect key file must be named 'AuthKey_${ASC_KEY_ID}.p8' (got '$(basename "$ASC_KEY_PATH")')."
-    exit 1
-  fi
+  # altool only searches fixed dirs or $API_PRIVATE_KEYS_DIR for AuthKey_<key id>.p8 (name
+  # checked with the key, before the build).
   export API_PRIVATE_KEYS_DIR="$(dirname "$ASC_KEY_PATH")"
 
   info "Uploading to App Store Connect..."
@@ -966,3 +975,6 @@ fi
 run_release_hook post-upload
 
 success "Release process completed successfully! 🎉"
+
+exit
+}
