@@ -27,16 +27,24 @@ copy in a project.
    rolls back the release files it changed (version file, `fastlane/metadata`,
    `fastlane/release_notes_version.txt`, lockfiles) to their state at this point, through an
    `EXIT` trap; changes made before the release are kept.
-4. Flutter: asks for the platforms (Android and iOS, iOS only, Android only). With iOS, the App
-   Store Connect API key must be complete (`APP_STORE_CONNECT_API_KEY` /
-   `APP_STORE_CONNECT_APP_ISSUER_ID` / `APP_STORE_CONNECT_API_KEY_PATH`, or the
-   `APP_STORE_CONNECT_API_KEY_KEY_ID` / `_ISSUER_ID` / `_KEY_FILEPATH` naming; Flutter needs the
-   file named `AuthKey_<key id>.p8` for altool): otherwise the release stops with an error before
-   changing anything. Android-only releases don't need it. With Android,
-   `android/key.properties` must hold a usable upload key (`android/app/upload-keystore.jks`,
-   credentials from the app's 1Password item): otherwise the release stops before changing
-   anything. After the Android build, it checks that the bundle is signed with that key, and
-   stops before any commit otherwise.
+4. Runs every quick check before any processing (version bump, `git fetch`, release notes,
+   Fastlane install, La Totale, builds), so a missing prerequisite stops the release in seconds:
+   - Flutter: asks for the platforms (Android and iOS, iOS only, Android only). With iOS, Xcode
+     must be installed: otherwise it offers to release Android only (both platforms) or stops.
+   - With iOS, the App Store Connect API key must be complete (`APP_STORE_CONNECT_API_KEY` /
+     `APP_STORE_CONNECT_APP_ISSUER_ID` / `APP_STORE_CONNECT_API_KEY_PATH`, or the
+     `APP_STORE_CONNECT_API_KEY_KEY_ID` / `_ISSUER_ID` / `_KEY_FILEPATH` naming; Flutter needs
+     the file named `AuthKey_<key id>.p8` for altool): otherwise the release stops with an error.
+     Android-only releases don't need it.
+   - With Android, `android/key.properties` must hold a usable upload key
+     (`android/app/upload-keystore.jks`, credentials from the app's 1Password item): otherwise
+     the release stops. After the Android build, it checks that the bundle is signed with that
+     key, and stops before any commit otherwise.
+   - Flutter: when `dart_defines.json` is missing, it warns and asks whether to go on without it
+     (default no).
+   - Fastlane: native iOS projects need a `fastlane/Fastfile` with the `ios build` and
+     `ios upload` lanes, and Bundler. With a Fastfile and Bundler on Android, a missing Google
+     Play key (`PLAY_STORE_JSON_KEY_PATH`) asks whether to upload the bundle manually later.
 5. Reads the version. Releases are tagged `<version>+<build>`, where a `.0` patch is dropped and
    any other patch kept (`1.3+45`, `1.3.1+46`): pubspec.yaml keeps `1.3.0` (Flutter needs x.y.z)
    while the stores, tag and commit use `1.3`. A project whose tags already use
@@ -44,11 +52,9 @@ copy in a project.
    `Version 7.3 (15)` commit messages. When the tag exists, or the build number was already
    released, it offers a patch, minor, major or build-only bump, past the highest tagged build
    number, and writes it to the project.
-6. When `fastlane/Fastfile` exists and Bundler is installed (required for native iOS): checks the
-   Google Play key (`PLAY_STORE_JSON_KEY_PATH`, Flutter with Android), runs `bundle install`,
-   writes the release notes with AI when they are missing (below), then runs
-   `fastlane validate_metadata` when the Fastfile has it, so a store text over its limit fails
-   before the builds.
+6. When `fastlane/Fastfile` exists and Bundler is installed: runs `bundle install`, writes the
+   release notes with AI when they are missing (below), then runs `fastlane validate_metadata`
+   when the Fastfile has it, so a store text over its limit fails before the builds.
 7. Runs the project's `scripts/release-hooks/pre-build.sh` when it exists (after the notes, before
    the build; a failure stops the release; files it stages go into the release commit).
 8. Builds. Flutter: `scripts/la-totale.sh` (clean, pub get, code generation, l10n, format,
