@@ -46,7 +46,10 @@ copy in a project.
      `ios upload` lanes, and Bundler. With a Fastfile and Bundler on Android, a missing Google
      Play key (`PLAY_STORE_JSON_KEY_PATH`) asks whether to upload the bundle manually later;
      with a valid key, it asks which Play track gets the draft (production by default, open,
-     closed or internal testing).
+     closed or internal testing). For each store being released with no locale folder yet in
+     `fastlane/metadata/ios` (or `fastlane/metadata` in native iOS) or `fastlane/metadata/android`,
+     and a Fastfile with `download_metadata`, it asks whether to download the current store
+     metadata (default yes), so the release notes get written for its locales.
 5. Reads the version. Releases are tagged `<version>+<build>`, where a `.0` patch is dropped and
    any other patch kept (`1.3+45`, `1.3.1+46`): pubspec.yaml keeps `1.3.0` (Flutter needs x.y.z)
    while the stores, tag and commit use `1.3`. A project whose tags already use
@@ -54,7 +57,9 @@ copy in a project.
    `Version 7.3 (15)` commit messages. When the tag exists, or the build number was already
    released, it offers a patch, minor, major or build-only bump, past the highest tagged build
    number, and writes it to the project.
-6. When `fastlane/Fastfile` exists and Bundler is installed: runs `bundle install`, writes the
+6. When `fastlane/Fastfile` exists and Bundler is installed: runs `bundle install`, downloads the
+   store metadata accepted above (`ios download_metadata`, `android download_metadata`; a failed
+   download only warns), writes the
    release notes with AI when they are missing (below), then runs `fastlane validate_metadata`
    when the Fastfile has it, so a store text over its limit fails before the builds.
 7. Runs the project's `scripts/release-hooks/pre-build.sh` when it exists (after the notes, before
@@ -86,7 +91,12 @@ Hooks receive `RELEASE_VERSION`, `RELEASE_BUILD` and `RELEASE_TAG`.
 - Flutter: `fastlane/Fastfile` is shared by every project (symlink to the Flutter template); only
   `fastlane/Appfile` (identifiers) and `Gemfile`/`Gemfile.lock` belong to the project. Lanes:
   `validate_metadata` (offline length checks), `ios metadata` (App Store texts and screenshots),
-  `android metadata` (Play listing only), `android upload` (AAB + notes, production draft).
+  `android metadata` (Play listing only), `android upload` (AAB + notes, production draft),
+  `ios download_metadata` and `android download_metadata` (the current store metadata, as
+  `deliver download_metadata` and `supply init` fetch it: every locale's texts, the iOS review
+  information with its demo password, categories and copyright, the Play images and screenshots;
+  no iOS screenshots). Once downloaded, it is pushed with every release (Play images only when
+  their checksum changed), so edit it in the repo, not in the consoles.
 - Native iOS: the project owns its Fastfile and must keep the `ios build` and `ios upload` lanes.
 - Only the files that exist are pushed: a project versions just the release notes, or the full
   listings too (texts, Play images, iOS screenshots in `fastlane/screenshots/ios/<locale>`).

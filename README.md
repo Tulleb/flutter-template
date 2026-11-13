@@ -118,7 +118,9 @@ Per project:
 3. Commit `Gemfile`, `Gemfile.lock` and `fastlane/` (except the ignored reports).
 
 Lanes (`bundle exec fastlane <lane>`): `validate_metadata`, `ios metadata`, `android metadata`,
-`android upload`.
+`android upload`, `ios download_metadata`, `android download_metadata`. When a store has no texts
+in `fastlane/metadata` yet, `scripts/release.sh` offers to download its current metadata first
+(default yes).
 
 > The app must already exist in App Store Connect and in the Play Console, with a first bundle
 > uploaded by hand to Play (e.g. to internal testing), before Fastlane can upload to it.
