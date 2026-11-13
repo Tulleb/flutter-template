@@ -13,6 +13,8 @@
 # - Full listings: add name.txt, subtitle.txt, description.txt… (iOS) or title.txt,
 #   short_description.txt, full_description.txt, images/… (Android), and iOS screenshots in
 #   fastlane/screenshots/ios/<locale>.
+# Projects with no store texts yet can fetch the current ones with `ios download_metadata` and
+# `android download_metadata` (scripts/release.sh offers it, default yes).
 # Release notes are written by scripts/write-changelog.py when the release needs new ones (see
 # scripts/changelog-format.md).
 #
@@ -138,6 +140,23 @@ platform :ios do
       force: true,
     )
   end
+
+  desc "Download the current App Store metadata into fastlane/metadata/ios, as"
+  desc "`fastlane deliver download_metadata` does: the texts of every locale (release notes"
+  desc "included), categories, copyright and review information (no screenshots)."
+  desc "scripts/release.sh offers it when the project has no App Store texts yet"
+  lane :download_metadata do
+    require "deliver"
+    require "deliver/setup"
+    authenticate # also authorizes the Spaceship requests below
+    app_identifier = CredentialsManager::AppfileConfig.try_fetch_value(:app_identifier)
+    app = Spaceship::ConnectAPI::App.find(app_identifier)
+    UI.user_error!("No app #{app_identifier} in App Store Connect") unless app
+    version = app.get_latest_app_store_version(platform: Spaceship::ConnectAPI::Platform::IOS)
+    UI.user_error!("No App Store version of #{app_identifier} to download the metadata from") unless version
+    Deliver::Setup.new.generate_metadata_files(app, version, File.expand_path("../#{IOS_METADATA}"), {})
+    UI.success("App Store metadata downloaded into #{IOS_METADATA}.")
+  end
 end
 
 platform :android do
@@ -153,7 +172,29 @@ platform :android do
       skip_upload_metadata: !any_file?("metadata/android/*/{title,short_description,full_description}.txt"),
       skip_upload_images: !any_file?("metadata/android/*/images/*.{png,jpg,jpeg}"),
       skip_upload_screenshots: !any_file?("metadata/android/*/images/*Screenshots/*.{png,jpg,jpeg}"),
+      # Only the images whose checksum differs from Google Play's are uploaded.
+      sync_image_upload: true,
     }
+  end
+
+  desc "Download the current Google Play metadata into fastlane/metadata/android, as"
+  desc "`fastlane supply init` does: the listing texts, images and screenshots of every language,"
+  desc "and the release notes of the latest production release. scripts/release.sh offers it when"
+  desc "the project has no Google Play texts yet"
+  lane :download_metadata do
+    require "supply"
+    require "supply/setup"
+    path = File.expand_path("../#{ANDROID_METADATA}")
+    # supply skips the download when the folder exists, even empty.
+    Dir.rmdir(path) if Dir.exist?(path) && Dir.empty?(path)
+    Supply.config = FastlaneCore::Configuration.create(Supply::Options.available_options, {
+      json_key: play_options[:json_key],
+      package_name: CredentialsManager::AppfileConfig.try_fetch_value(:package_name),
+      metadata_path: path,
+    })
+    Supply::Setup.new.perform_download
+    # Builds released without notes come down as empty changelogs, which validate_metadata refuses.
+    Dir.glob("#{path}/*/changelogs/*.txt").each { |file| File.delete(file) if File.read(file).strip.empty? }
   end
 
   desc "Push the Google Play listing texts and images, without any release"
