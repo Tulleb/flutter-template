@@ -112,7 +112,9 @@ Hooks receive `RELEASE_VERSION`, `RELEASE_BUILD` and `RELEASE_TAG`.
 
 - `scripts/write-changelog.py` (shared) writes the notes of the version being released when
   `fastlane/release_notes_version.txt` does not name it or a locale has no notes: the commits
-  since the last release tag (and the commit messages of `CHANGELOG_EXTRA_REPOS`) go to OpenAI
+  since the last release tag of an earlier version (builds of the version being released are
+  skipped, so a build-only bump covers every change since the previous version; and the commit
+  messages of `CHANGELOG_EXTRA_REPOS`) go to OpenAI
   (`OPENAI_API_KEY` in `.secret.local`, `CHANGELOG_MODEL` in `.secret.local` or `.env`) with the
   rules of `scripts/changelog-format.md` (shared) and the project's optional
   `fastlane/changelog-context.md`, then the notes are localized into every store locale with the

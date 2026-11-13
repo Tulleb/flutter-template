@@ -196,9 +196,11 @@ signed with it. Neither `android/key.properties` nor the keystore is ever commit
 When `fastlane/release_notes_version.txt` doesn't name the version being released, or a store
 locale has no notes, `scripts/release.sh` runs `scripts/write-changelog.py`:
 
-1. OpenAI reads the commits since the last release tag (messages and trimmed diffs, without tests,
-   tooling and generated files) and writes the reference notes (`en-US` when the project has it):
-   a full App Store text and a Google Play one within 500 characters.
+1. OpenAI reads the commits since the last release tag of an earlier version (a build-only bump
+   still covers every change since the previous version, not just since the last build; messages
+   and trimmed diffs, without tests, tooling and generated files) and writes the reference notes
+   (`en-US` when the project has it): a full App Store text and a Google Play one within 500
+   characters.
 2. It localizes them into every store locale, naming screens and features with the app's own
    translations from the `.arb` files.
 3. The notes are written to `fastlane/metadata`, the version to
@@ -228,7 +230,7 @@ the exact names of its screens and plans, what to skip, an example changelog, or
 format. Start from `fastlane/changelog-context.example.md`. Editing either file changes what the
 next release writes; never put app-specific rules in the shared file.
 
-No notes are written for a first release (no previous tag).
+No notes are written for a first release (no tag of an earlier version).
 
 ## Release secrets
 
